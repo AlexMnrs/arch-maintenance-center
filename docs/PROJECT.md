@@ -91,6 +91,33 @@ hardware concreto.
 - Idioma inicial de la interfaz: inglés mediante Noctalia Translate.
 - Referencia de estructura: el plugin GitHub Activity de AlexMnrs.
 
+### Recopilación de la primera versión
+
+Todas las comprobaciones son de solo lectura, se ejecutan como el usuario y
+tienen un tiempo de espera acotado. Noctalia limita a 25 ms el tiempo de CPU de
+cada callback de comando, por lo que los callbacks reciben y analizan
+únicamente datos pequeños y acotados. Un timeout, callback perdido o ámbito no disponible
+deja el módulo afectado como incompleto; no se convierte en un estado saludable.
+
+| Módulo | Fuente | Ámbito y límite |
+| --- | --- | --- |
+| Actualizaciones | `bash -o pipefail -c 'checkupdates --nocolor \| wc -l'` y `bash -c "grep -F 'starting full system upgrade' /var/log/pacman.log \| tail -n 1"` | Repositorios oficiales, sin `sudo`; solo conserva el entero y una línea de log; 30 s para `checkupdates` |
+| Servicios | `systemctl --failed` y `systemctl --user --failed` | Unidades fallidas de sistema y usuario, 5 s por ámbito |
+| Disco | Estadísticas nativas de Noctalia, con `df` como alternativa | Sistema de archivos raíz `/`, 5 s para la alternativa |
+
+Services no comprueba que todas las unidades estén activas ni intenta reparar o
+reiniciar servicios: informa únicamente de unidades que `systemd` ya considera
+fallidas. Si el ámbito de usuario no puede leerse, conserva el resultado del
+ámbito del sistema pero marca el diagnóstico global como parcial.
+
+El servicio se activa internamente cada segundo para separar la programación
+automática del refresco de la vigilancia. Cada recopilación tiene una generación
+y un plazo defensivo de 35 segundos. Al vencerlo, completa los módulos
+pendientes con `collection_deadline`, publica un diagnóstico incompleto y libera
+el refresco; callbacks duplicados o tardíos de una generación previa se ignoran.
+El botón Refresh solo permanece deshabilitado mientras esa recopilación válida
+está activa.
+
 ### Decisiones futuras
 
 Antes de ampliar la primera versión deben investigarse y registrarse:

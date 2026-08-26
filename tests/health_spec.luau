@@ -36,6 +36,15 @@ local incomplete = Health.aggregate({
 })
 A.equal(incomplete.complete, false, "unavailable module incomplete")
 A.equal(incomplete.unavailableCount, 1, "unavailable counted")
+A.equal(incomplete.unavailableModules[1], "updates", "unavailable module named")
 A.equal(incomplete.severity, "ok", "known health remains separate from completeness")
+
+local partial = Health.aggregate({
+  updates = module("ready", "ok"),
+  services = { state = "ready", severity = "ok", complete = false },
+  disk = module("ready", "ok"),
+})
+A.equal(partial.complete, false, "partial ready module keeps diagnosis incomplete")
+A.equal(partial.unavailableModules[1], "services", "partial module is traceable")
 
 print("health_spec passed")

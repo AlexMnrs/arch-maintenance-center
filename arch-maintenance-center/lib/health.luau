@@ -17,13 +17,16 @@ function Health.aggregate(modules)
   local complete = true
   local issueCount = 0
   local unavailableCount = 0
+  local unavailableModules = {}
 
   for _, name in ipairs(ORDER) do
     local module = modules[name]
-    if type(module) ~= "table" or module.state ~= "ready" then
+    if type(module) ~= "table" or module.state ~= "ready" or module.complete == false then
       complete = false
       unavailableCount = unavailableCount + 1
-    else
+      table.insert(unavailableModules, name)
+    end
+    if type(module) == "table" and module.state == "ready" then
       local moduleRank = RANK[module.severity] or 0
       if moduleRank > rank then
         rank = moduleRank
@@ -40,6 +43,7 @@ function Health.aggregate(modules)
     complete = complete,
     issueCount = issueCount,
     unavailableCount = unavailableCount,
+    unavailableModules = unavailableModules,
   }
 end
 

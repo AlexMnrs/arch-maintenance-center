@@ -24,6 +24,8 @@
   },
   "global": {
     "waiting": "Waiting for the first diagnosis.",
+    "checking": "Checking system health",
+    "checking_detail": "Running 3 read-only checks.",
     "healthy": "System OK",
     "attention": "Attention needed",
     "critical": "Critical condition",
@@ -32,6 +34,7 @@
     "issues": "{count} areas need attention.",
     "unavailable_one": "1 module could not be checked.",
     "unavailable": "{count} modules could not be checked.",
+    "unavailable_modules": "Could not check: {modules}.",
     "no_issues": "No issues detected by the available checks."
   },
   "updates": {
@@ -41,13 +44,18 @@
     "last_upgrade": "Last full upgrade: {days} days ago",
     "last_upgrade_unknown": "Last full upgrade date unavailable",
     "missing_checkupdates": "Install pacman-contrib to check pending updates safely.",
-    "error": "The update check failed. Try checkupdates in a terminal."
+    "error": "The update check failed. Try checkupdates in a terminal.",
+    "timeout": "The update check timed out. Check the network, mirrors, or pacman database lock.",
+    "deadline": "The update check did not complete. You can retry."
   },
   "services": {
     "healthy": "No failed units",
+    "system_healthy": "No failed system units",
     "failed_one": "1 failed unit",
     "failed": "{count} failed units",
     "error": "System services could not be checked.",
+    "scopes_checked": "System and user units checked",
+    "user_scope_unavailable": "User units could not be checked",
     "system_prefix": "System · ",
     "user_prefix": "User · "
   },
@@ -70,6 +78,7 @@
   "status": {
     "loading": "Loading system diagnosis…",
     "refreshing": "Refreshing system diagnosis…",
+    "initial_check": "Initial check · Updates may take up to 30 seconds",
     "never_updated": "No completed diagnosis yet",
     "last_updated": "Last updated at {time} · Auto-refresh every {interval} min"
   },
