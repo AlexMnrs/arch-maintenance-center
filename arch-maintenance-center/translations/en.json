@@ -1,0 +1,84 @@
+{
+  "plugin": {
+    "name": "Arch Maintenance Center",
+    "description": "A read-only Arch Linux health dashboard for your Noctalia bar."
+  },
+  "settings": {
+    "refresh_interval": {
+      "label": "Refresh interval",
+      "description": "How often the system diagnosis refreshes automatically.",
+      "options": {
+        "fifteen": "Every 15 minutes",
+        "thirty": "Every 30 minutes",
+        "sixty": "Every 60 minutes"
+      }
+    }
+  },
+  "panel": {
+    "title": "Arch Maintenance Center"
+  },
+  "module": {
+    "updates": "Updates",
+    "services": "Services",
+    "disk": "Disk"
+  },
+  "global": {
+    "waiting": "Waiting for the first diagnosis.",
+    "healthy": "System OK",
+    "attention": "Attention needed",
+    "critical": "Critical condition",
+    "incomplete": "Diagnosis incomplete",
+    "issue_one": "1 area needs attention.",
+    "issues": "{count} areas need attention.",
+    "unavailable_one": "1 module could not be checked.",
+    "unavailable": "{count} modules could not be checked.",
+    "no_issues": "No issues detected by the available checks."
+  },
+  "updates": {
+    "current": "System packages are current",
+    "pending_one": "1 update pending",
+    "pending": "{count} updates pending",
+    "last_upgrade": "Last full upgrade: {days} days ago",
+    "last_upgrade_unknown": "Last full upgrade date unavailable",
+    "missing_checkupdates": "Install pacman-contrib to check pending updates safely.",
+    "error": "The update check failed. Try checkupdates in a terminal."
+  },
+  "services": {
+    "healthy": "No failed units",
+    "failed_one": "1 failed unit",
+    "failed": "{count} failed units",
+    "error": "System services could not be checked.",
+    "system_prefix": "System · ",
+    "user_prefix": "User · "
+  },
+  "disk": {
+    "used": "{percent}% used",
+    "root_filesystem": "Root filesystem /",
+    "source_noctalia": "Measured by Noctalia",
+    "source_df": "Measured by df fallback",
+    "error": "Root disk usage could not be checked."
+  },
+  "widget": {
+    "healthy": "Arch Maintenance Center\nSystem OK",
+    "attention_one": "Arch Maintenance Center\n1 area needs attention",
+    "attention": "Arch Maintenance Center\n{count} areas need attention",
+    "critical_one": "Arch Maintenance Center\n1 critical or warning area",
+    "critical": "Arch Maintenance Center\n{count} critical or warning areas",
+    "incomplete_one": "Arch Maintenance Center\nDiagnosis incomplete: 1 unavailable module",
+    "incomplete": "Arch Maintenance Center\nDiagnosis incomplete: {count} unavailable modules"
+  },
+  "status": {
+    "loading": "Loading system diagnosis…",
+    "refreshing": "Refreshing system diagnosis…",
+    "never_updated": "No completed diagnosis yet",
+    "last_updated": "Last updated at {time} · Auto-refresh every {interval} min"
+  },
+  "action": {
+    "refresh": "Refresh",
+    "copy_diagnosis": "Copy diagnosis",
+    "copy_commands": "Copy inspection commands",
+    "diagnosis_copied": "Diagnosis copied to the clipboard.",
+    "commands_copied": "Read-only inspection commands copied to the clipboard.",
+    "copy_failed": "Could not copy text to the clipboard."
+  }
+}

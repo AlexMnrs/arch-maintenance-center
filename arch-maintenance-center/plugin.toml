@@ -1,0 +1,40 @@
+id = "alexmnrs/arch-maintenance-center"
+name = "Arch Maintenance Center"
+version = "0.1.0"
+plugin_api = 24
+author = "AlexMnrs"
+license = "MIT"
+icon = "shield-check"
+description = "A read-only Arch Linux health dashboard for your Noctalia bar."
+tags = ["bar", "panel", "service", "system", "monitoring", "maintenance", "utility", "arch"]
+dependencies = ["pacman-contrib"]
+
+[[setting]]
+key = "refresh_interval_minutes"
+type = "select"
+label_key = "settings.refresh_interval.label"
+description_key = "settings.refresh_interval.description"
+default = "15"
+options = [
+  { value = "15", label_key = "settings.refresh_interval.options.fifteen" },
+  { value = "30", label_key = "settings.refresh_interval.options.thirty" },
+  { value = "60", label_key = "settings.refresh_interval.options.sixty" },
+]
+
+[[widget]]
+id = "health"
+entry = "widget.luau"
+
+[[panel]]
+id = "dashboard"
+entry = "panel.luau"
+width = 680
+height = 500
+placement = "attached"
+position = "auto"
+open_near_click = true
+dismiss_on_outside_click = true
+
+[[service]]
+id = "monitor"
+entry = "monitor.luau"

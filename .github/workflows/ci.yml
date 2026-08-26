@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  luau-tests:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Luau
+        run: pacman -Syu --noconfirm luau
+      - name: Compile Luau sources
+        run: |
+          for file in arch-maintenance-center/*.luau arch-maintenance-center/lib/*.luau tests/*.luau; do
+            luau-compile "$file" >/dev/null
+          done
+      - name: Run tests
+        run: |
+          for test_file in tests/*_spec.luau; do
+            luau "$test_file"
+          done
