@@ -18,10 +18,25 @@ runs updates, cleanup, repairs, or privileged commands.
 
 - Noctalia v5.0.0-beta.9 or newer with plugin API 24;
 - Arch Linux with systemd;
-- `pacman-contrib` for the `checkupdates` command.
+- `pacman-contrib` for the `checkupdates` command;
+- `bash`, `grep`, `tail`, and `wc` (normally supplied by the base system).
 
 When `pacman-contrib` is missing, the rest of the diagnosis remains available
 and the updates card explains the missing dependency.
+
+Updates invokes the fixed read-only command
+`bash -o pipefail -c 'checkupdates --nocolor | wc -l'` and retains only its
+numeric count. It reads at most one matching `starting full system upgrade`
+line from `/var/log/pacman.log`; an unavailable log still produces a ready
+updates result with an unknown date. Commands have bounded timeouts and the
+service has a 35-second watchdog, so a slow mirror, unavailable service, or
+lost callback cannot leave the whole diagnosis refreshing indefinitely.
+
+The Services card checks failed `systemd` units in both the system and user
+scopes and marks the diagnosis as partial when the user scope cannot be read.
+
+The panel uses Noctalia palette roles rather than fixed colors, so backgrounds,
+text, accents, borders, and controls follow the active light or dark theme.
 
 ## Usage
 

@@ -1,5 +1,7 @@
 --!nonstrict
 
+local Command = require("./lib/command.luau")
+local Collection = require("./lib/collection.luau")
 local Disk = require("./lib/disk.luau")
 local Health = require("./lib/health.luau")
 local Refresh = require("./lib/refresh.luau")
@@ -7,9 +9,18 @@ local Services = require("./lib/services.luau")
 local Settings = require("./lib/settings.luau")
 local Updates = require("./lib/updates.luau")
 
+local CHECKUPDATES_TIMEOUT_MS = 30000
+local LOCAL_COMMAND_TIMEOUT_MS = 5000
+local COLLECTION_TIMEOUT_MS = 35000
+local WATCHDOG_TICK_MS = 1000
+local MODULE_NAMES = { "updates", "services", "disk" }
+
 local gate = Refresh.new()
-local pending = 0
 local started = false
+local refreshIntervalMs = Settings.refreshIntervalMs("15")
+local nextRefreshAtMs = nil
+local run = nil
+local runSequence = 0
 local snapshot = {
   refreshing = false,
   collectedAtMs = nil,
@@ -24,16 +35,15 @@ local function publish()
   noctalia.state.set("snapshot", snapshot)
 end
 
-local function finishModule(name, moduleResult)
-  snapshot.modules[name] = moduleResult
-  pending = pending - 1
-  if pending > 0 then
-    publish()
+local function finishRun()
+  if run == nil then
     return
   end
-
+  local completedAtMs = noctalia.nowMs()
+  run = nil
   snapshot.refreshing = false
-  snapshot.collectedAtMs = noctalia.nowMs()
+  snapshot.collectedAtMs = completedAtMs
+  nextRefreshAtMs = Collection.nextRefreshAtMs(completedAtMs, refreshIntervalMs)
   local rerun = Refresh.complete(gate)
   publish()
   if rerun then
@@ -41,11 +51,17 @@ local function finishModule(name, moduleResult)
   end
 end
 
-local function commandFailed(result)
-  return result == nil
-    or result.timedOut == true
-    or result.stdoutTruncated == true
-    or result.stderrTruncated == true
+local function finishModule(runId, name, moduleResult)
+  local accepted, complete = Collection.complete(run, runId, name)
+  if not accepted then
+    return
+  end
+  snapshot.modules[name] = moduleResult
+  if not complete then
+    publish()
+    return
+  end
+  finishRun()
 end
 
 local function collectUpdates(checkedAtMs, done)
@@ -54,32 +70,38 @@ local function collectUpdates(checkedAtMs, done)
     return
   end
 
-  local accepted = noctalia.runAsync({ "checkupdates", "--nocolor" }, function(checkResult)
-    if commandFailed(checkResult) then
-      done(Updates.error(checkedAtMs, "command_failed"))
+  if not noctalia.commandExists("bash") then
+    done(Updates.error(checkedAtMs, "missing_bash"))
+    return
+  end
+
+  local accepted = noctalia.runAsync({ "bash", "-o", "pipefail", "-c", "checkupdates --nocolor | wc -l" }, function(checkResult)
+    local failure = Command.failure(checkResult)
+    if failure ~= nil then
+      done(Updates.error(checkedAtMs, failure))
       return
     end
 
-    local function finish(logText)
-      done(Updates.fromCommand(checkResult.exitCode, checkResult.stdout or "", logText, checkedAtMs))
+    local function finish(logLine)
+      done(Updates.fromCount(checkResult.exitCode, checkResult.stdout or "", logLine, checkedAtMs))
     end
 
-    if not noctalia.commandExists("tail") then
+    if not noctalia.commandExists("grep") or not noctalia.commandExists("tail") then
       finish(nil)
       return
     end
 
-    local tailAccepted = noctalia.runAsync({ "tail", "-n", "5000", "/var/log/pacman.log" }, function(logResult)
-      if commandFailed(logResult) or logResult.exitCode ~= 0 then
+    local tailAccepted = noctalia.runAsync({ "bash", "-c", "grep -F 'starting full system upgrade' /var/log/pacman.log | tail -n 1" }, function(logResult)
+      if Command.failure(logResult) ~= nil or logResult.exitCode ~= 0 then
         finish(nil)
       else
         finish(logResult.stdout or "")
       end
-    end)
+    end, LOCAL_COMMAND_TIMEOUT_MS)
     if not tailAccepted then
       finish(nil)
     end
-  end)
+  end, CHECKUPDATES_TIMEOUT_MS)
   if not accepted then
     done(Updates.error(checkedAtMs, "command_rejected"))
   end
@@ -100,8 +122,8 @@ local function collectServices(checkedAtMs, done)
     if not systemFinished or not userFinished then
       return
     end
-    local systemExit = commandFailed(systemResult) and 1 or systemResult.exitCode
-    local userExit = commandFailed(userResult) and 1 or userResult.exitCode
+    local systemExit = Command.failure(systemResult) ~= nil and 1 or systemResult.exitCode
+    local userExit = Command.failure(userResult) ~= nil and 1 or userResult.exitCode
     done(Services.fromScopes(
       systemExit,
       systemResult and systemResult.stdout or "",
@@ -116,7 +138,7 @@ local function collectServices(checkedAtMs, done)
     systemResult = value
     systemFinished = true
     finishIfReady()
-  end)
+  end, LOCAL_COMMAND_TIMEOUT_MS)
   if not systemAccepted then
     systemResult = { exitCode = 1 }
     systemFinished = true
@@ -126,7 +148,7 @@ local function collectServices(checkedAtMs, done)
     userResult = value
     userFinished = true
     finishIfReady()
-  end)
+  end, LOCAL_COMMAND_TIMEOUT_MS)
   if not userAccepted then
     userResult = { exitCode = 1 }
     userFinished = true
@@ -147,12 +169,13 @@ local function collectDisk(checkedAtMs, done)
   end
 
   local accepted = noctalia.runAsync({ "df", "--output=size,avail,pcent,target", "-B1", "/" }, function(dfResult)
-    if commandFailed(dfResult) then
-      done(Disk.error(checkedAtMs, "command_failed"))
+    local failure = Command.failure(dfResult)
+    if failure ~= nil then
+      done(Disk.error(checkedAtMs, failure))
     else
       done(Disk.fromDf(dfResult.exitCode, dfResult.stdout or "", checkedAtMs))
     end
-  end)
+  end, LOCAL_COMMAND_TIMEOUT_MS)
   if not accepted then
     done(Disk.error(checkedAtMs, "command_rejected"))
   end
@@ -166,17 +189,39 @@ refresh = function()
   end
 
   local checkedAtMs = noctalia.nowMs()
-  pending = 3
+  runSequence = runSequence + 1
+  local runId = runSequence
+  run = Collection.new(runId, checkedAtMs, checkedAtMs + COLLECTION_TIMEOUT_MS, MODULE_NAMES)
   snapshot.refreshing = true
   publish()
 
-  collectUpdates(checkedAtMs, function(value) finishModule("updates", value) end)
-  collectServices(checkedAtMs, function(value) finishModule("services", value) end)
-  collectDisk(checkedAtMs, function(value) finishModule("disk", value) end)
+  collectUpdates(checkedAtMs, function(value) finishModule(runId, "updates", value) end)
+  collectServices(checkedAtMs, function(value) finishModule(runId, "services", value) end)
+  collectDisk(checkedAtMs, function(value) finishModule(runId, "disk", value) end)
 end
 
 local function configureRefreshInterval()
-  noctalia.setUpdateInterval(Settings.refreshIntervalMs(noctalia.getConfig("refresh_interval_minutes")))
+  refreshIntervalMs = Settings.refreshIntervalMs(noctalia.getConfig("refresh_interval_minutes"))
+  noctalia.setUpdateInterval(WATCHDOG_TICK_MS)
+end
+
+local function moduleDeadlineResult(name, checkedAtMs)
+  if name == "updates" then
+    return Updates.error(checkedAtMs, "collection_deadline")
+  elseif name == "services" then
+    return Services.error(checkedAtMs, "collection_deadline")
+  end
+  return Disk.error(checkedAtMs, "collection_deadline")
+end
+
+local function expireRun(nowMs)
+  if not Collection.expired(run, nowMs) then
+    return
+  end
+  local expiredRun = run
+  for _, name in ipairs(Collection.pendingNames(expiredRun)) do
+    finishModule(expiredRun.id, name, moduleDeadlineResult(name, expiredRun.checkedAtMs))
+  end
 end
 
 local function ensureStarted()
@@ -194,7 +239,11 @@ end)
 ensureStarted()
 
 function update()
-  refresh()
+  local nowMs = noctalia.nowMs()
+  expireRun(nowMs)
+  if run == nil and Collection.isDue(nextRefreshAtMs, nowMs) then
+    refresh()
+  end
 end
 
 function onEnable()

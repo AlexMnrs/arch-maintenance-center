@@ -17,6 +17,9 @@ local function healthPresentation()
   end
 
   local health = snapshot.health
+  if snapshot.refreshing == true and type(snapshot.collectedAtMs) ~= "number" then
+    return "shield-search", "surface_variant", "on_surface_variant", tr("global.checking"), tr("global.checking_detail")
+  end
   if health.severity == "critical" then
     local key = health.issueCount == 1 and "global.issue_one" or "global.issues"
     return "shield-x", "error_container", "on_error_container", tr("global.critical"), tr(key, { count = health.issueCount })
@@ -24,8 +27,17 @@ local function healthPresentation()
     local key = health.issueCount == 1 and "global.issue_one" or "global.issues"
     return "shield-exclamation", "tertiary_container", "on_tertiary_container", tr("global.attention"), tr(key, { count = health.issueCount })
   elseif health.complete ~= true then
-    local key = health.unavailableCount == 1 and "global.unavailable_one" or "global.unavailable"
-    return "shield-exclamation", "surface_variant", "on_surface_variant", tr("global.incomplete"), tr(key, { count = health.unavailableCount })
+    local names = {}
+    for _, name in ipairs(type(health.unavailableModules) == "table" and health.unavailableModules or {}) do
+      table.insert(names, tr("module." .. name))
+    end
+    local detail = #names > 0
+      and tr("global.unavailable_modules", { modules = table.concat(names, ", ") })
+      or tr(
+        health.unavailableCount == 1 and "global.unavailable_one" or "global.unavailable",
+        { count = health.unavailableCount }
+      )
+    return "shield-exclamation", "surface_variant", "on_surface_variant", tr("global.incomplete"), detail
   end
   return "shield-check", "primary_container", "on_primary_container", tr("global.healthy"), tr("global.no_issues")
 end
@@ -83,7 +95,9 @@ local function updatesCard()
   elseif module.state == "unavailable" then
     return unavailableCard(tr("module.updates"), "package", tr("updates.missing_checkupdates"))
   elseif module.state ~= "ready" then
-    return unavailableCard(tr("module.updates"), "package", tr("updates.error"))
+    local message = module.detail == "collection_deadline" and tr("updates.deadline")
+      or (module.detail == "command_timed_out" and tr("updates.timeout") or tr("updates.error"))
+    return unavailableCard(tr("module.updates"), "package", message)
   end
 
   local data = module.data or {}
@@ -114,14 +128,21 @@ local function servicesCard()
 
   local data = module.data or {}
   local count = tonumber(data.count) or 0
-  local color = count > 0 and "tertiary" or "primary"
+  local partial = module.complete == false
+  local color = count > 0 and "tertiary" or (partial and "on_surface_variant" or "primary")
   local children = {
     ui.label({
-      text = count == 0 and tr("services.healthy")
+      text = count == 0 and (partial and tr("services.system_healthy") or tr("services.healthy"))
         or (count == 1 and tr("services.failed_one") or tr("services.failed", { count = count })),
       fontSize = 18,
       fontWeight = "bold",
       color = color,
+    }),
+    ui.label({
+      text = partial and tr("services.user_scope_unavailable") or tr("services.scopes_checked"),
+      fontSize = 10,
+      color = "on_surface_variant",
+      maxLines = 2,
     }),
   }
   for index, unit in ipairs(type(data.units) == "table" and data.units or {}) do
@@ -162,19 +183,29 @@ local function lastUpdated()
     return tr("status.never_updated")
   end
   return tr("status.last_updated", {
-    time = os.date("%H:%M", math.floor(snapshot.collectedAtMs / 1000)),
+    time = noctalia.formatTime(noctalia.timeFormat(), math.floor(snapshot.collectedAtMs / 1000)),
     interval = Settings.refreshIntervalMinutes(noctalia.getConfig("refresh_interval_minutes")),
   })
 end
 
 function render()
+  local refreshing = snapshot ~= nil and snapshot.refreshing == true
   local header = ui.row({ align = "center", gap = 12, paddingH = 18, paddingV = 11 }, {
     ui.glyph({ name = "shield-check", size = 25, color = "on_surface" }),
     ui.label({ text = tr("panel.title"), fontSize = 19, fontWeight = "bold", flexGrow = 1 }),
-    ui.button({ glyph = "refresh", variant = "ghost", tooltip = tr("action.refresh"), onClick = "onRefreshClicked" }),
+    ui.button({
+      glyph = "refresh",
+      variant = "ghost",
+      controlSize = "sm",
+      enabled = not refreshing,
+      tooltip = refreshing and tr("status.refreshing") or tr("action.refresh"),
+      onClick = "onRefreshClicked",
+    }),
   })
 
-  local statusLine = snapshot ~= nil and snapshot.refreshing == true and tr("status.refreshing") or lastUpdated()
+  local statusLine = refreshing
+    and (type(snapshot.collectedAtMs) == "number" and tr("status.refreshing") or tr("status.initial_check"))
+    or lastUpdated()
   local body = ui.column({ gap = 12, paddingH = 18, paddingV = 14, flexGrow = 1 }, {
     banner(),
     ui.label({ text = statusLine, fontSize = 10, color = "on_surface_variant", textAlign = "end" }),
@@ -182,9 +213,27 @@ function render()
     diskCard(),
   })
 
-  local actions = ui.row({ gap = 10, justify = "end", paddingH = 14, paddingV = 10 }, {
-    ui.button({ text = tr("action.copy_diagnosis"), glyph = "clipboard", variant = "outline", onClick = "onCopyDiagnosis" }),
-    ui.button({ text = tr("action.copy_commands"), glyph = "terminal-2", variant = "outline", onClick = "onCopyCommands" }),
+  local actions = ui.row({ gap = 8, justify = "end", paddingH = 18, paddingV = 8 }, {
+    ui.button({
+      text = tr("action.copy_diagnosis"),
+      glyph = "clipboard",
+      fontSize = 12,
+      controlSize = "sm",
+      contentAlign = "center",
+      variant = "outline",
+      flexGrow = 1,
+      onClick = "onCopyDiagnosis",
+    }),
+    ui.button({
+      text = tr("action.copy_commands"),
+      glyph = "terminal-2",
+      fontSize = 12,
+      controlSize = "sm",
+      contentAlign = "center",
+      variant = "outline",
+      flexGrow = 1,
+      onClick = "onCopyCommands",
+    }),
   })
 
   panel.render(ui.column({ gap = 0, fill = "surface", flexGrow = 1, align = "stretch" }, {

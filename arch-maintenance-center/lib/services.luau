@@ -72,7 +72,9 @@ function Services.fromScopes(systemExitCode, systemOutput, userExitCode, userOut
     return Services.error(checkedAtMs, parseError)
   end
 
+  local systemCount = #units
   local userScopeAvailable = userExitCode == 0
+  local userCount = 0
   if userScopeAvailable then
     local userUnits, userParseError = Services.parseFailed(userOutput or "", "user")
     if userUnits == nil then
@@ -81,6 +83,7 @@ function Services.fromScopes(systemExitCode, systemOutput, userExitCode, userOut
     for _, unit in ipairs(userUnits) do
       table.insert(units, unit)
     end
+    userCount = #userUnits
   end
 
   table.sort(units, function(left, right)
@@ -90,11 +93,15 @@ function Services.fromScopes(systemExitCode, systemOutput, userExitCode, userOut
     return left.scope < right.scope
   end)
 
-  return result("ready", #units > 0 and "warning" or "ok", checkedAtMs, #units > 0 and "services_failed" or "services_healthy", nil, {
+  local value = result("ready", #units > 0 and "warning" or "ok", checkedAtMs, #units > 0 and "services_failed" or "services_healthy", nil, {
     count = #units,
+    systemCount = systemCount,
+    userCount = userCount,
     units = units,
     userScopeAvailable = userScopeAvailable,
   })
+  value.complete = userScopeAvailable
+  return value
 end
 
 return Services
