@@ -9,6 +9,20 @@ A.equal(Updates.parseCount("0\n"), 0, "zero updates parsed")
 A.equal(Updates.parseCount("1\n"), 1, "one update parsed")
 A.equal(Updates.parseCount("97\n"), 97, "multiple updates parsed")
 
+local summary = Updates.parseSummary(table.concat({
+  "package\tlinux\t6.17.2\t6.17.3",
+  "package\tfirefox\t142.0\t142.0.1",
+  "count\t10",
+}, "\n"))
+A.equal(summary.count, 10, "summary count parsed")
+A.equal(#summary.packages, 2, "package sample parsed")
+A.equal(summary.packages[1].availableVersion, "6.17.3", "available version retained")
+A.equal(summary.packagesTruncated, true, "sample truncation retained")
+
+local malformedSummary, summaryError = Updates.parseSummary("package\tlinux\t6.17.2\ncount\t1\n")
+A.equal(malformedSummary, nil, "malformed package rejected")
+A.equal(summaryError, "malformed_package", "malformed package traced")
+
 local malformed, malformedError = Updates.parseCount("1\n2\n")
 A.equal(malformed, nil, "multiple lines rejected")
 A.equal(malformedError, "invalid_count", "malformed count error")
@@ -44,5 +58,10 @@ A.equal(failed.state, "error", "exit one is error")
 
 local inconsistent = Updates.fromCount(2, "1\n", recentLog, now)
 A.equal(inconsistent.state, "error", "exit two with a nonzero count is error")
+
+local detailed = Updates.fromSummary(0, "package\tlinux\t6.17.2\t6.17.3\ncount\t1\n", recentLog, now)
+A.equal(detailed.state, "ready", "detailed update result ready")
+A.equal(detailed.data.packages[1].name, "linux", "detailed package retained")
+A.equal(Updates.upgradeCommand(), "sudo pacman -Syu", "upgrade command is explicit")
 
 print("updates_spec passed")

@@ -2,6 +2,7 @@ local Updates = {}
 
 local DAY_MS = 24 * 60 * 60 * 1000
 local STALE_DAYS = 14
+local PACKAGE_SAMPLE_LIMIT = 8
 
 local function result(state, severity, checkedAtMs, summary, detail, data)
   return {
@@ -35,6 +36,54 @@ function Updates.parseCount(output)
     return nil, "invalid_count"
   end
   return count
+end
+
+function Updates.parseSummary(output)
+  if type(output) ~= "string" then
+    return nil, "invalid_output"
+  end
+
+  local count = nil
+  local packages = {}
+  for rawLine in string.gmatch(output .. "\n", "(.-)\r?\n") do
+    if rawLine ~= "" then
+      local label, first, second, third = string.match(rawLine, "^(%a+)\t([^\t]*)\t?([^\t]*)\t?([^\t]*)$")
+      if label == "package" then
+        if first == "" or second == "" or third == ""
+          or #first > 256 or #second > 256 or #third > 256
+          or string.match(first, "^[%w@_.+%-]+$") == nil
+          or string.match(second, "%s") ~= nil
+          or string.match(third, "%s") ~= nil
+        then
+          return nil, "malformed_package"
+        end
+        table.insert(packages, {
+          name = first,
+          installedVersion = second,
+          availableVersion = third,
+        })
+      elseif label == "count" and second == "" and third == "" then
+        if count ~= nil then
+          return nil, "duplicate_count"
+        end
+        count = Updates.parseCount(first)
+        if count == nil then
+          return nil, "invalid_count"
+        end
+      else
+        return nil, "malformed_line"
+      end
+    end
+  end
+
+  if count == nil or count < #packages then
+    return nil, "invalid_count"
+  end
+  return {
+    count = count,
+    packages = packages,
+    packagesTruncated = count > #packages,
+  }
 end
 
 function Updates.parseLastFullUpgrade(logLine)
@@ -87,6 +136,32 @@ function Updates.fromCount(exitCode, output, logLine, checkedAtMs)
     lastUpgradeMs = lastUpgradeMs,
     daysSinceLastUpgrade = daysSinceLastUpgrade,
   })
+end
+
+function Updates.fromSummary(exitCode, output, logLine, checkedAtMs)
+  if exitCode ~= 0 and exitCode ~= 2 then
+    return Updates.error(checkedAtMs, "command_failed")
+  end
+
+  local parsed, parseError = Updates.parseSummary(output)
+  if parsed == nil or (exitCode == 2 and parsed.count ~= 0) then
+    return Updates.error(checkedAtMs, parseError or "invalid_count")
+  end
+
+  local base = Updates.fromCount(exitCode, tostring(parsed.count), logLine, checkedAtMs)
+  if base.state == "ready" then
+    base.data.packages = parsed.packages
+    base.data.packagesTruncated = parsed.packagesTruncated
+  end
+  return base
+end
+
+function Updates.packageSampleLimit()
+  return PACKAGE_SAMPLE_LIMIT
+end
+
+function Updates.upgradeCommand()
+  return "sudo pacman -Syu"
 end
 
 return Updates

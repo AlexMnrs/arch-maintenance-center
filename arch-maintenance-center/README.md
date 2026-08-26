@@ -6,34 +6,47 @@ A read-only Arch Linux health dashboard for the Noctalia v5 bar.
 
 ## What it checks
 
-- pending repository updates and the age of the last full system upgrade;
-- failed system and user services;
-- root filesystem usage.
+- pending repository updates, a bounded package sample, and the age of the
+  last full system upgrade;
+- failed system and user services, with bounded unit samples;
+- root filesystem usage, pacman cache, orphan packages, and journal storage;
+- recent error-priority journal events visible to the current user.
 
 The bar widget opens a native Noctalia panel with the current diagnosis. The
-panel can copy a redacted summary and read-only inspection commands. It never
-runs updates, cleanup, repairs, or privileged commands.
+panel can open details for each area, copy a redacted summary, and copy
+read-only inspection commands. It never runs updates, cleanup, repairs, or
+privileged commands. The Updates detail can copy `sudo pacman -Syu` after an
+explicit warning; it does not run the command.
 
 ## Requirements
 
 - Noctalia v5.0.0-beta.9 or newer with plugin API 24;
 - Arch Linux with systemd;
 - `pacman-contrib` for the `checkupdates` command;
-- `bash`, `grep`, `tail`, and `wc` (normally supplied by the base system).
+- `jq` for bounded journal preprocessing;
+- `bash`, `awk`, `grep`, `tail`, `du`, `pacman`, and `journalctl`
+  (normally supplied by the base system).
 
 When `pacman-contrib` is missing, the rest of the diagnosis remains available
 and the updates card explains the missing dependency.
 
-Updates invokes the fixed read-only command
-`bash -o pipefail -c 'checkupdates --nocolor | wc -l'` and retains only its
-numeric count. It reads at most one matching `starting full system upgrade`
-line from `/var/log/pacman.log`; an unavailable log still produces a ready
-updates result with an unknown date. Commands have bounded timeouts and the
-service has a 35-second watchdog, so a slow mirror, unavailable service, or
-lost callback cannot leave the whole diagnosis refreshing indefinitely.
+Updates invokes a fixed read-only command based on `checkupdates --nocolor`
+and retains the count plus at most eight name/version records. It reads at most
+one matching `starting full system upgrade` line from `/var/log/pacman.log`;
+an unavailable log still produces a ready updates result with an unknown date.
+Commands have bounded timeouts and the service has a 35-second watchdog, so a
+slow mirror, unavailable service, or lost callback cannot leave the whole
+diagnosis refreshing indefinitely.
 
 The Services card checks failed `systemd` units in both the system and user
-scopes and marks the diagnosis as partial when the user scope cannot be read.
+scopes, retains at most 20 units per scope, and marks the diagnosis as partial
+when the user scope cannot be read. Cleanup sources remain independent, so a
+single unavailable source is visible as partial rather than hiding the others.
+System Logs preprocesses at most eleven events per scope outside the Luau
+callback, then shows the ten most recent normalized errors from the current
+boot; raw log messages are never copied into the diagnosis. Pacman cache size
+excludes private `download-*` directories that cannot be inspected without
+elevated privileges.
 
 The panel uses Noctalia palette roles rather than fixed colors, so backgrounds,
 text, accents, borders, and controls follow the active light or dark theme.

@@ -19,6 +19,9 @@ local function presentation()
   elseif health.complete ~= true then
     local key = health.unavailableCount == 1 and "widget.incomplete_one" or "widget.incomplete"
     return "shield-exclamation", "!", tr(key, { count = health.unavailableCount }) .. suffix
+  elseif (tonumber(health.maintenanceCount) or 0) > 0 then
+    local key = health.maintenanceCount == 1 and "widget.maintenance_one" or "widget.maintenance"
+    return "tool", tostring(health.maintenanceCount), tr(key, { count = health.maintenanceCount }) .. suffix
   end
   return "shield-check", "", tr("widget.healthy") .. suffix
 end

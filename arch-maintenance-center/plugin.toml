@@ -1,13 +1,13 @@
 id = "alexmnrs/arch-maintenance-center"
 name = "Arch Maintenance Center"
-version = "0.1.0"
+version = "0.3.0"
 plugin_api = 24
 author = "AlexMnrs"
 license = "MIT"
 icon = "shield-check"
 description = "A read-only Arch Linux health dashboard for your Noctalia bar."
 tags = ["bar", "panel", "service", "system", "monitoring", "maintenance", "utility", "arch"]
-dependencies = ["pacman-contrib"]
+dependencies = ["pacman-contrib", "jq"]
 
 [[setting]]
 key = "refresh_interval_minutes"

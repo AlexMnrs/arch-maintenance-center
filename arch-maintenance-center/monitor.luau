@@ -2,8 +2,10 @@
 
 local Command = require("./lib/command.luau")
 local Collection = require("./lib/collection.luau")
+local Cleanup = require("./lib/cleanup.luau")
 local Disk = require("./lib/disk.luau")
 local Health = require("./lib/health.luau")
+local Logs = require("./lib/logs.luau")
 local Refresh = require("./lib/refresh.luau")
 local Services = require("./lib/services.luau")
 local Settings = require("./lib/settings.luau")
@@ -13,7 +15,7 @@ local CHECKUPDATES_TIMEOUT_MS = 30000
 local LOCAL_COMMAND_TIMEOUT_MS = 5000
 local COLLECTION_TIMEOUT_MS = 35000
 local WATCHDOG_TICK_MS = 1000
-local MODULE_NAMES = { "updates", "services", "disk" }
+local MODULE_NAMES = { "updates", "services", "disk", "cleanup", "logs" }
 
 local gate = Refresh.new()
 local started = false
@@ -70,12 +72,18 @@ local function collectUpdates(checkedAtMs, done)
     return
   end
 
-  if not noctalia.commandExists("bash") then
-    done(Updates.error(checkedAtMs, "missing_bash"))
+  if not noctalia.commandExists("bash") or not noctalia.commandExists("awk") then
+    done(Updates.error(checkedAtMs, "missing_bash_or_awk"))
     return
   end
 
-  local accepted = noctalia.runAsync({ "bash", "-o", "pipefail", "-c", "checkupdates --nocolor | wc -l" }, function(checkResult)
+  local accepted = noctalia.runAsync({
+    "bash",
+    "-o",
+    "pipefail",
+    "-c",
+    "checkupdates --nocolor | awk 'BEGIN { count = 0 } { count += 1; if (count <= 8) printf \"package\\t%s\\t%s\\t%s\\n\", $1, $2, $4 } END { printf \"count\\t%d\\n\", count }'",
+  }, function(checkResult)
     local failure = Command.failure(checkResult)
     if failure ~= nil then
       done(Updates.error(checkedAtMs, failure))
@@ -83,7 +91,7 @@ local function collectUpdates(checkedAtMs, done)
     end
 
     local function finish(logLine)
-      done(Updates.fromCount(checkResult.exitCode, checkResult.stdout or "", logLine, checkedAtMs))
+      done(Updates.fromSummary(checkResult.exitCode, checkResult.stdout or "", logLine, checkedAtMs))
     end
 
     if not noctalia.commandExists("grep") or not noctalia.commandExists("tail") then
@@ -105,6 +113,13 @@ local function collectUpdates(checkedAtMs, done)
   if not accepted then
     done(Updates.error(checkedAtMs, "command_rejected"))
   end
+end
+
+local function failedUnitsCommand(userScope)
+  local scope = userScope and "systemctl --user" or "systemctl"
+  return scope
+    .. " --failed --no-legend --plain --no-pager"
+    .. " | awk 'BEGIN { count = 0 } { count += 1; if (count <= 20) print \"unit\\t\" substr($0, 1, 1024) } END { print \"count\\t\" count }'"
 end
 
 local function collectServices(checkedAtMs, done)
@@ -133,8 +148,12 @@ local function collectServices(checkedAtMs, done)
     ))
   end
 
-  local args = { "systemctl", "--failed", "--no-legend", "--plain", "--no-pager" }
-  local systemAccepted = noctalia.runAsync(args, function(value)
+  if not noctalia.commandExists("bash") or not noctalia.commandExists("awk") then
+    done(Services.error(checkedAtMs, "missing_bash_or_awk"))
+    return
+  end
+
+  local systemAccepted = noctalia.runAsync({ "bash", "-o", "pipefail", "-c", failedUnitsCommand(false) }, function(value)
     systemResult = value
     systemFinished = true
     finishIfReady()
@@ -144,13 +163,157 @@ local function collectServices(checkedAtMs, done)
     systemFinished = true
   end
 
-  local userAccepted = noctalia.runAsync({ "systemctl", "--user", "--failed", "--no-legend", "--plain", "--no-pager" }, function(value)
+  local userAccepted = noctalia.runAsync({ "bash", "-o", "pipefail", "-c", failedUnitsCommand(true) }, function(value)
     userResult = value
     userFinished = true
     finishIfReady()
   end, LOCAL_COMMAND_TIMEOUT_MS)
   if not userAccepted then
     userResult = { exitCode = 1 }
+    userFinished = true
+  end
+  finishIfReady()
+end
+
+local function collectCleanup(checkedAtMs, done)
+  local cache = nil
+  local orphans = nil
+  local journal = nil
+
+  local function finishIfReady()
+    if cache ~= nil and orphans ~= nil and journal ~= nil then
+      done(Cleanup.aggregate(cache, orphans, journal, checkedAtMs))
+    end
+  end
+
+  if noctalia.commandExists("du") then
+    local accepted = noctalia.runAsync(
+      { "du", "--summarize", "--block-size=1", "--exclude=download-*", "/var/cache/pacman/pkg" },
+      function(value)
+        if Command.failure(value) ~= nil then
+          cache = Cleanup.error(Command.failure(value))
+        else
+          cache = Cleanup.cacheFromDu(value.exitCode, value.stdout or "")
+        end
+        finishIfReady()
+      end,
+      LOCAL_COMMAND_TIMEOUT_MS
+    )
+    if not accepted then
+      cache = Cleanup.error("command_rejected")
+    end
+  else
+    cache = Cleanup.error("missing_du")
+  end
+
+  if noctalia.commandExists("pacman") and noctalia.commandExists("bash") and noctalia.commandExists("awk") then
+    local accepted = noctalia.runAsync({
+      "bash",
+      "-o",
+      "pipefail",
+      "-c",
+      "pacman -Qtdq | awk 'BEGIN { count = 0 } { count += 1; if (count <= 8) print \"package\\t\" $0 } END { print \"count\\t\" count }'",
+    }, function(value)
+      if Command.failure(value) ~= nil then
+        orphans = Cleanup.error(Command.failure(value))
+      else
+        orphans = Cleanup.orphansFromSummary(value.exitCode, value.stdout or "")
+      end
+      finishIfReady()
+    end, LOCAL_COMMAND_TIMEOUT_MS)
+    if not accepted then
+      orphans = Cleanup.error("command_rejected")
+    end
+  else
+    orphans = Cleanup.error("missing_pacman_bash_or_awk")
+  end
+
+  if noctalia.commandExists("journalctl") and noctalia.commandExists("env") then
+    local accepted = noctalia.runAsync({ "env", "LC_ALL=C", "journalctl", "--disk-usage" }, function(value)
+      if Command.failure(value) ~= nil then
+        journal = Cleanup.error(Command.failure(value))
+      else
+        journal = Cleanup.journalFromUsage(value.exitCode, value.stdout or "")
+      end
+      finishIfReady()
+    end, LOCAL_COMMAND_TIMEOUT_MS)
+    if not accepted then
+      journal = Cleanup.error("command_rejected")
+    end
+  else
+    journal = Cleanup.error("missing_journalctl_or_env")
+  end
+
+  finishIfReady()
+end
+
+local function decodeJson(value)
+  local ok, decoded = pcall(function()
+    return noctalia.json.decode(value)
+  end)
+  return ok and decoded or nil
+end
+
+local function collectLogs(checkedAtMs, done)
+  if not noctalia.commandExists("journalctl") or not noctalia.commandExists("bash") or not noctalia.commandExists("jq") then
+    done(Logs.error(checkedAtMs, "missing_journalctl_bash_or_jq"))
+    return
+  end
+
+  local systemResult = nil
+  local userResult = nil
+  local systemFinished = false
+  local userFinished = false
+  local function parseScope(value, scope)
+    local failure = Command.failure(value)
+    if failure ~= nil then
+      return { exitCode = 1, events = {}, detail = failure }
+    elseif value.exitCode ~= 0 then
+      return { exitCode = 1, events = {}, detail = "command_failed" }
+    end
+    local decoded = decodeJson(value.stdout or "")
+    if decoded == nil then
+      return { exitCode = 1, events = {}, detail = "invalid_json" }
+    end
+    local events, parseError = Logs.parsePrepared(decoded, scope)
+    if events == nil then
+      return { exitCode = 1, events = {}, detail = parseError }
+    end
+    return { exitCode = 0, events = events }
+  end
+
+  local function finishIfReady()
+    if not systemFinished or not userFinished then
+      return
+    end
+    done(Logs.fromScopes(
+      systemResult.exitCode,
+      systemResult.events,
+      userResult.exitCode,
+      userResult.events,
+      checkedAtMs,
+      systemResult.detail,
+      userResult.detail
+    ))
+  end
+
+  local systemAccepted = noctalia.runAsync({ "bash", "-o", "pipefail", "-c", Logs.collectionCommand(false) }, function(value)
+    systemResult = parseScope(value, "system")
+    systemFinished = true
+    finishIfReady()
+  end, LOCAL_COMMAND_TIMEOUT_MS)
+  if not systemAccepted then
+    systemResult = { exitCode = 1, events = {}, detail = "command_rejected" }
+    systemFinished = true
+  end
+
+  local userAccepted = noctalia.runAsync({ "bash", "-o", "pipefail", "-c", Logs.collectionCommand(true) }, function(value)
+    userResult = parseScope(value, "user")
+    userFinished = true
+    finishIfReady()
+  end, LOCAL_COMMAND_TIMEOUT_MS)
+  if not userAccepted then
+    userResult = { exitCode = 1, events = {}, detail = "command_rejected" }
     userFinished = true
   end
   finishIfReady()
@@ -198,6 +361,8 @@ refresh = function()
   collectUpdates(checkedAtMs, function(value) finishModule(runId, "updates", value) end)
   collectServices(checkedAtMs, function(value) finishModule(runId, "services", value) end)
   collectDisk(checkedAtMs, function(value) finishModule(runId, "disk", value) end)
+  collectCleanup(checkedAtMs, function(value) finishModule(runId, "cleanup", value) end)
+  collectLogs(checkedAtMs, function(value) finishModule(runId, "logs", value) end)
 end
 
 local function configureRefreshInterval()
@@ -210,6 +375,15 @@ local function moduleDeadlineResult(name, checkedAtMs)
     return Updates.error(checkedAtMs, "collection_deadline")
   elseif name == "services" then
     return Services.error(checkedAtMs, "collection_deadline")
+  elseif name == "cleanup" then
+    return Cleanup.aggregate(
+      Cleanup.error("collection_deadline"),
+      Cleanup.error("collection_deadline"),
+      Cleanup.error("collection_deadline"),
+      checkedAtMs
+    )
+  elseif name == "logs" then
+    return Logs.error(checkedAtMs, "collection_deadline")
   end
   return Disk.error(checkedAtMs, "collection_deadline")
 end
