@@ -1,5 +1,7 @@
 local Services = {}
 
+local UNIT_SAMPLE_LIMIT = 20
+
 local function trim(value)
   return (string.gsub(value or "", "^%s*(.-)%s*$", "%1"))
 end
@@ -13,6 +15,21 @@ local function result(state, severity, checkedAtMs, summary, detail, data)
     detail = detail,
     data = data or {},
   }
+end
+
+local function cleanDescription(value)
+  local characters = {}
+  for index = 1, #(value or "") do
+    local byte = string.byte(value, index)
+    if byte ~= nil then
+      table.insert(characters, (byte < 32 or byte == 127) and " " or string.char(byte))
+    end
+  end
+  local cleaned = trim(table.concat(characters))
+  if #cleaned > 240 then
+    cleaned = string.sub(cleaned, 1, 237) .. "..."
+  end
+  return cleaned
 end
 
 function Services.isSafeUnitName(value)
@@ -50,12 +67,51 @@ function Services.parseFailed(output, scope)
         loadState = loadState,
         activeState = activeState,
         subState = subState,
-        description = trim(description),
+        description = cleanDescription(description),
         commandSafe = Services.isSafeUnitName(name),
       })
     end
   end
   return units
+end
+
+function Services.parseScope(output, scope)
+  if type(output) ~= "string" then
+    return nil, "invalid_output"
+  end
+
+  local count = nil
+  local units = {}
+  for rawLine in string.gmatch(output .. "\n", "(.-)\r?\n") do
+    if rawLine ~= "" then
+      local label, value = string.match(rawLine, "^(%a+)\t(.*)$")
+      if label == "unit" then
+        local parsed, parseError = Services.parseFailed(value, scope)
+        if parsed == nil or #parsed ~= 1 then
+          return nil, parseError or "malformed_line"
+        end
+        table.insert(units, parsed[1])
+      elseif label == "count" then
+        if count ~= nil then
+          return nil, "duplicate_count"
+        end
+        count = tonumber(value)
+        if count == nil or count < 0 or math.floor(count) ~= count then
+          return nil, "invalid_count"
+        end
+      else
+        return nil, "malformed_line"
+      end
+    end
+  end
+  if count == nil or count < #units then
+    return nil, "invalid_count"
+  end
+  return {
+    count = count,
+    units = units,
+    truncated = count > #units,
+  }
 end
 
 function Services.error(checkedAtMs, detail)
@@ -67,23 +123,26 @@ function Services.fromScopes(systemExitCode, systemOutput, userExitCode, userOut
     return Services.error(checkedAtMs, "system_scope_failed")
   end
 
-  local units, parseError = Services.parseFailed(systemOutput or "", "system")
-  if units == nil then
+  local system, parseError = Services.parseScope(systemOutput or "", "system")
+  if system == nil then
     return Services.error(checkedAtMs, parseError)
   end
 
-  local systemCount = #units
+  local units = system.units
+  local systemCount = system.count
   local userScopeAvailable = userExitCode == 0
   local userCount = 0
+  local userTruncated = false
   if userScopeAvailable then
-    local userUnits, userParseError = Services.parseFailed(userOutput or "", "user")
-    if userUnits == nil then
+    local user, userParseError = Services.parseScope(userOutput or "", "user")
+    if user == nil then
       return Services.error(checkedAtMs, userParseError)
     end
-    for _, unit in ipairs(userUnits) do
+    for _, unit in ipairs(user.units) do
       table.insert(units, unit)
     end
-    userCount = #userUnits
+    userCount = user.count
+    userTruncated = user.truncated
   end
 
   table.sort(units, function(left, right)
@@ -93,15 +152,23 @@ function Services.fromScopes(systemExitCode, systemOutput, userExitCode, userOut
     return left.scope < right.scope
   end)
 
-  local value = result("ready", #units > 0 and "warning" or "ok", checkedAtMs, #units > 0 and "services_failed" or "services_healthy", nil, {
-    count = #units,
+  local totalCount = systemCount + userCount
+  local value = result("ready", totalCount > 0 and "warning" or "ok", checkedAtMs, totalCount > 0 and "services_failed" or "services_healthy", nil, {
+    count = totalCount,
     systemCount = systemCount,
     userCount = userCount,
     units = units,
+    unitsTruncated = system.truncated or userTruncated,
+    systemUnitsTruncated = system.truncated,
+    userUnitsTruncated = userTruncated,
     userScopeAvailable = userScopeAvailable,
   })
   value.complete = userScopeAvailable
   return value
+end
+
+function Services.unitSampleLimit()
+  return UNIT_SAMPLE_LIMIT
 end
 
 return Services

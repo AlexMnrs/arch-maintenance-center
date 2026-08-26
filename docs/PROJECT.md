@@ -91,7 +91,7 @@ hardware concreto.
 - Idioma inicial de la interfaz: inglés mediante Noctalia Translate.
 - Referencia de estructura: el plugin GitHub Activity de AlexMnrs.
 
-### Recopilación de la primera versión
+### Recopilación implementada
 
 Todas las comprobaciones son de solo lectura, se ejecutan como el usuario y
 tienen un tiempo de espera acotado. Noctalia limita a 25 ms el tiempo de CPU de
@@ -101,14 +101,36 @@ deja el módulo afectado como incompleto; no se convierte en un estado saludable
 
 | Módulo | Fuente | Ámbito y límite |
 | --- | --- | --- |
-| Actualizaciones | `bash -o pipefail -c 'checkupdates --nocolor \| wc -l'` y `bash -c "grep -F 'starting full system upgrade' /var/log/pacman.log \| tail -n 1"` | Repositorios oficiales, sin `sudo`; solo conserva el entero y una línea de log; 30 s para `checkupdates` |
-| Servicios | `systemctl --failed` y `systemctl --user --failed` | Unidades fallidas de sistema y usuario, 5 s por ámbito |
+| Actualizaciones | `checkupdates --nocolor` resumido por una canalización estática y última línea relevante de `/var/log/pacman.log` | Repositorios oficiales, sin `sudo`; conserva el total y como máximo ocho nombre/versiones; 30 s para `checkupdates` |
+| Servicios | `systemctl --failed` y `systemctl --user --failed`, resumidos por una canalización estática | Unidades fallidas de sistema y usuario; conserva como máximo veinte por ámbito; 5 s por ámbito |
 | Disco | Estadísticas nativas de Noctalia, con `df` como alternativa | Sistema de archivos raíz `/`, 5 s para la alternativa |
+| Limpieza | `du --summarize --block-size=1 --exclude='download-*' /var/cache/pacman/pkg`, `pacman -Qtdq` y `journalctl --disk-usage` | Caché, excluyendo directorios privados de descargas temporales que el usuario no puede leer; huérfanos y journal sin `sudo`; conserva ocho huérfanos como máximo; 5 s por fuente |
+| Logs | `journalctl` y `journalctl --user` del arranque actual con prioridad `err` o superior, resumidos por una expresión estática de `jq` | Como máximo once eventos por ámbito y diez mostrados; la salida entregada a Luau ya contiene solo fecha, prioridad, origen de 128 caracteres y mensaje de 240; 5 s por ámbito |
 
 Services no comprueba que todas las unidades estén activas ni intenta reparar o
 reiniciar servicios: informa únicamente de unidades que `systemd` ya considera
 fallidas. Si el ámbito de usuario no puede leerse, conserva el resultado del
 ámbito del sistema pero marca el diagnóstico global como parcial.
+
+Cleanup conserva por separado el resultado de caché, huérfanos y journal. Los
+huérfanos son una señal informativa de mantenimiento; la caché y el journal se
+exponen como contexto hasta que existan umbrales configurables y documentados.
+
+Logs recoge solamente eventos de error o prioridad superior que el usuario
+actual puede leer. Se muestra la evidencia normalizada, pero los mensajes libres
+no se copian al diagnóstico: este contiene únicamente conteos, truncamiento y
+disponibilidad de los ámbitos.
+
+El estado global distingue la severidad de los datos de mantenimiento: una
+señal `info` produce “Maintenance available”, mientras que solo `warning` y
+`critical` elevan la atención. El número de actualizaciones pendientes no es
+por sí solo una advertencia; se mantiene el umbral de 14 días desde una
+actualización completa para dicha clasificación. Los módulos incompletos se
+declaran en el resumen junto a la severidad conocida.
+
+Los detalles de Updates incluyen el comando `sudo pacman -Syu` únicamente
+como texto copiable y con advertencia; no se añade a los comandos generales de
+inspección ni se ejecuta desde el plugin.
 
 El servicio se activa internamente cada segundo para separar la programación
 automática del refresco de la vigilancia. Cada recopilación tiene una generación
@@ -122,11 +144,11 @@ está activa.
 
 Antes de ampliar la primera versión deben investigarse y registrarse:
 
-- las fuentes de datos y permisos mínimos de cada módulo;
 - la evolución de la fórmula del estado global y sus umbrales configurables;
 - el soporte de gestores auxiliares del AUR;
-- el formato seguro y redactado del diagnóstico;
-- la incorporación de logs, red, caché y paquetes huérfanos.
+- la interpretación de warnings genéricos antes de tratarlos como incidencias;
+- las fuentes de datos y permisos mínimos de red;
+- tamaños reales de descarga y cualquier acción correctiva.
 
 Las decisiones firmes deberán añadirse a este documento con su justificación.
 Los cambios visibles para usuarios deberán añadirse también al changelog.

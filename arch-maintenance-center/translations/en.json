@@ -20,18 +20,23 @@
   "module": {
     "updates": "Updates",
     "services": "Services",
-    "disk": "Disk"
+    "disk": "Disk & Cleanup",
+    "cleanup": "Cleanup",
+    "logs": "System Logs"
   },
   "global": {
     "waiting": "Waiting for the first diagnosis.",
     "checking": "Checking system health",
-    "checking_detail": "Running 3 read-only checks.",
+    "checking_detail": "Running 5 read-only checks.",
     "healthy": "System OK",
+    "maintenance_available": "Maintenance available",
     "attention": "Attention needed",
     "critical": "Critical condition",
     "incomplete": "Diagnosis incomplete",
     "issue_one": "1 area needs attention.",
     "issues": "{count} areas need attention.",
+    "maintenance_one": "1 area has maintenance information.",
+    "maintenance": "{count} areas have maintenance information.",
     "unavailable_one": "1 module could not be checked.",
     "unavailable": "{count} modules could not be checked.",
     "unavailable_modules": "Could not check: {modules}.",
@@ -41,8 +46,13 @@
     "current": "System packages are current",
     "pending_one": "1 update pending",
     "pending": "{count} updates pending",
-    "last_upgrade": "Last full upgrade: {days} days ago",
+    "checked_at": "Updates checked: {time}",
+    "last_upgrade_at": "Last full upgrade: {time}",
     "last_upgrade_unknown": "Last full upgrade date unavailable",
+    "available_packages": "Available packages",
+    "more_packages": "And {count} more package(s).",
+    "upgrade_command": "Upgrade command",
+    "upgrade_warning": "This command changes installed packages and may ask for your administrator password. It is copied only; the plugin never runs it.",
     "missing_checkupdates": "Install pacman-contrib to check pending updates safely.",
     "error": "The update check failed. Try checkupdates in a terminal.",
     "timeout": "The update check timed out. Check the network, mirrors, or pacman database lock.",
@@ -53,6 +63,7 @@
     "system_healthy": "No failed system units",
     "failed_one": "1 failed unit",
     "failed": "{count} failed units",
+    "more_units": "And {count} more failed unit(s).",
     "error": "System services could not be checked.",
     "scopes_checked": "System and user units checked",
     "user_scope_unavailable": "User units could not be checked",
@@ -62,12 +73,38 @@
   "disk": {
     "used": "{percent}% used",
     "root_filesystem": "Root filesystem /",
+    "used_of_total": "{used} used of {total}",
+    "available": "{available} available",
     "source_noctalia": "Measured by Noctalia",
     "source_df": "Measured by df fallback",
     "error": "Root disk usage could not be checked."
   },
+  "cleanup": {
+    "title": "Cleanup information",
+    "cache": "Pacman cache",
+    "orphans_label": "Orphan packages",
+    "orphans_one": "1 orphan package",
+    "orphans": "{count} orphan packages",
+    "orphan_packages": "Package sample",
+    "more_orphans": "And {count} more orphan package(s).",
+    "journal": "Journal storage",
+    "error": "Cleanup information could not be fully checked."
+  },
+  "logs": {
+    "clear": "No recent errors",
+    "event_one": "1 recent error",
+    "events": "{count} recent errors",
+    "events_truncated": "10+ recent errors",
+    "since_boot": "Errors visible since the current boot",
+    "scope_partial": "One journal scope could not be checked",
+    "system_prefix": "System · ",
+    "user_prefix": "User · ",
+    "error": "System logs could not be checked."
+  },
   "widget": {
     "healthy": "Arch Maintenance Center\nSystem OK",
+    "maintenance_one": "Arch Maintenance Center\n1 area has maintenance information",
+    "maintenance": "Arch Maintenance Center\n{count} areas have maintenance information",
     "attention_one": "Arch Maintenance Center\n1 area needs attention",
     "attention": "Arch Maintenance Center\n{count} areas need attention",
     "critical_one": "Arch Maintenance Center\n1 critical or warning area",
@@ -80,14 +117,19 @@
     "refreshing": "Refreshing system diagnosis…",
     "initial_check": "Initial check · Updates may take up to 30 seconds",
     "never_updated": "No completed diagnosis yet",
-    "last_updated": "Last updated at {time} · Auto-refresh every {interval} min"
+    "last_updated": "Last updated at {time} · Auto-refresh every {interval} min",
+    "time_unavailable": "Time unavailable",
+    "unavailable": "Unavailable"
   },
   "action": {
     "refresh": "Refresh",
+    "back": "Back to overview",
     "copy_diagnosis": "Copy diagnosis",
     "copy_commands": "Copy inspection commands",
+    "copy_upgrade": "Copy upgrade command",
     "diagnosis_copied": "Diagnosis copied to the clipboard.",
     "commands_copied": "Read-only inspection commands copied to the clipboard.",
+    "upgrade_copied": "Upgrade command copied to the clipboard. It was not run.",
     "copy_failed": "Could not copy text to the clipboard."
   }
 }

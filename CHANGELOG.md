@@ -10,6 +10,17 @@ cuando comience a publicar versiones.
 
 ### Added
 
+- Vistas de detalle navegables para Updates, Services, Disk & Cleanup y System
+  Logs, sin cambiar el tamaño ni la API del panel.
+- Muestra acotada de paquetes oficiales pendientes y de unidades fallidas, con
+  indicadores cuando hay más elementos de los que se muestran.
+- Información de caché de pacman, paquetes huérfanos y espacio del journal.
+- Eventos de error recientes y visibles del journal de sistema y de usuario,
+  limitados por ámbito y presentados como evidencia informativa.
+- Botón específico para copiar el comando de actualización, con aviso explícito
+  de que modifica el sistema y no se ejecuta desde el plugin.
+- Pruebas de formato de bytes, limpieza, logs, truncamiento y redacción del
+  diagnóstico.
 - Definición inicial de la visión, el alcance y los principios de seguridad del
   proyecto.
 - README público y referencia visual de la primera versión.
@@ -24,6 +35,14 @@ cuando comience a publicar versiones.
 
 ### Changed
 
+- El resumen global distingue mantenimiento disponible de advertencias y
+  condiciones críticas; una cantidad de actualizaciones no se convierte por sí
+  sola en alerta.
+- Updates muestra una fecha y hora absoluta para la última actualización
+  completa y para la comprobación disponible, en lugar de solo días
+  transcurridos.
+- El diagnóstico copiable incorpora conteos y disponibilidad de Cleanup y Logs
+  sin incluir mensajes libres del journal.
 - El panel explica qué módulo impide completar el diagnóstico, distingue la
   primera carga de un resultado incompleto y aclara los ámbitos de `systemd`
   comprobados por Services.
@@ -33,6 +52,21 @@ cuando comience a publicar versiones.
 
 ### Fixed
 
+- Logs preprocesa una única muestra JSON acotada por ámbito antes del callback,
+  evitando exceder el presupuesto de CPU de Luau al decodificar eventos.
+- La medición de caché omite los directorios privados `download-*` creados por
+  pacman, que antes hacían fallar `du` pese a producir un tamaño válido.
+- El estado de mantenimiento deja de usar roles de color no reconocidos por
+  Noctalia API 24.
+- Los ámbitos de logs disponibles ya no conservan detalles de error residuales
+  en el estado compartido.
+- El encabezado prioriza un diagnóstico incompleto sobre mantenimiento
+  informativo, y Disk & Cleanup deja visible qué fuentes de limpieza no se
+  pudieron consultar.
+- La recopilación de logs normaliza los mensajes localmente en vez de depender
+  de una opción opcional de `journalctl`, mejorando la compatibilidad.
+- La recopilación de Updates, Services y paquetes huérfanos limita el volumen
+  que llega a los callbacks de Noctalia.
 - Updates reduce la salida procesada a un único recuento y una sola línea de
   `pacman.log`, para respetar el presupuesto de CPU de los callbacks de
   Noctalia.

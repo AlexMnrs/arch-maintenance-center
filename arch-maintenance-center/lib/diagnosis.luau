@@ -4,6 +4,13 @@ local function safeNumber(value, fallback)
   return type(value) == "number" and value or fallback
 end
 
+local function formatUtc(value)
+  if type(value) ~= "number" or value < 0 then
+    return "unknown"
+  end
+  return os.date("!%Y-%m-%dT%H:%M:%SZ", math.floor(value / 1000))
+end
+
 function Diagnosis.shellQuote(value)
   value = tostring(value or "")
   return "'" .. string.gsub(value, "'", "'\"'\"'") .. "'"
@@ -30,10 +37,11 @@ function Diagnosis.format(snapshot)
   local health = snapshot.health
   local lines = {
     "Arch Maintenance Center diagnosis",
-    "Generated: " .. os.date("!%Y-%m-%dT%H:%M:%SZ", math.floor(safeNumber(snapshot.collectedAtMs, 0) / 1000)),
+    "Generated: " .. formatUtc(snapshot.collectedAtMs),
     "Status: " .. tostring(health.severity or "unknown"),
     "Complete: " .. (health.complete == true and "yes" or "no"),
     "Issues: " .. tostring(safeNumber(health.issueCount, 0)),
+    "Maintenance areas: " .. tostring(safeNumber(health.maintenanceCount, 0)),
     "Unavailable modules: " .. tostring(safeNumber(health.unavailableCount, 0)),
   }
 
@@ -42,8 +50,8 @@ function Diagnosis.format(snapshot)
   if type(updates) == "table" and updates.state == "ready" then
     local data = updates.data or {}
     table.insert(lines, "Updates: " .. tostring(safeNumber(data.count, 0)) .. " pending")
-    if type(data.daysSinceLastUpgrade) == "number" then
-      table.insert(lines, "Last full upgrade: " .. tostring(data.daysSinceLastUpgrade) .. " days ago")
+    if type(data.lastUpgradeMs) == "number" then
+      table.insert(lines, "Last full upgrade: " .. formatUtc(data.lastUpgradeMs))
     else
       table.insert(lines, "Last full upgrade: unknown")
     end
@@ -71,6 +79,41 @@ function Diagnosis.format(snapshot)
     table.insert(lines, "Root disk: unavailable")
   end
 
+  local cleanup = modules.cleanup
+  if type(cleanup) == "table" and cleanup.state == "ready" then
+    local data = cleanup.data or {}
+    local cache = data.cache
+    local orphans = data.orphans
+    local journal = data.journal
+    if type(cache) == "table" and cache.state == "ready" then
+      table.insert(lines, "Pacman cache: " .. tostring(safeNumber(cache.data and cache.data.bytes, 0)) .. " bytes")
+    else
+      table.insert(lines, "Pacman cache: unavailable")
+    end
+    if type(orphans) == "table" and orphans.state == "ready" then
+      table.insert(lines, "Orphan packages: " .. tostring(safeNumber(orphans.data and orphans.data.count, 0)))
+    else
+      table.insert(lines, "Orphan packages: unavailable")
+    end
+    if type(journal) == "table" and journal.state == "ready" then
+      table.insert(lines, "Journal usage: " .. tostring(safeNumber(journal.data and journal.data.bytes, 0)) .. " bytes")
+    else
+      table.insert(lines, "Journal usage: unavailable")
+    end
+  else
+    table.insert(lines, "Cleanup: unavailable")
+  end
+
+  local logs = modules.logs
+  if type(logs) == "table" and logs.state == "ready" then
+    local data = logs.data or {}
+    table.insert(lines, "Journal errors shown: " .. tostring(safeNumber(data.count, 0)) .. (data.truncated == true and "+" or ""))
+    table.insert(lines, "System journal available: " .. (data.systemAvailable == true and "yes" or "no"))
+    table.insert(lines, "User journal available: " .. (data.userAvailable == true and "yes" or "no"))
+  else
+    table.insert(lines, "System logs: unavailable")
+  end
+
   return table.concat(lines, "\n")
 end
 
@@ -78,6 +121,11 @@ function Diagnosis.commands(snapshot)
   local commands = {
     "checkupdates --nocolor",
     "df -h /",
+    "du -sh /var/cache/pacman/pkg",
+    "pacman -Qtdq",
+    "journalctl --disk-usage",
+    "journalctl -b -p err --no-pager -n 50",
+    "journalctl --user -b -p err --no-pager -n 50",
   }
   local services = type(snapshot) == "table"
     and type(snapshot.modules) == "table"
