@@ -1,5 +1,14 @@
 local Diagnosis = {}
 
+local function isFixture(snapshot)
+  return type(snapshot) == "table"
+    and type(snapshot.source) == "table"
+    and snapshot.source.kind == "fixture"
+end
+
+local function fixtureId(snapshot)
+  return isFixture(snapshot) and type(snapshot.source.fixtureId) == "string" and snapshot.source.fixtureId or nil
+end
 
 local function safeNumber(value, fallback)
   return type(value) == "number" and value == value and value ~= math.huge and value >= 0 and value or fallback
@@ -79,7 +88,9 @@ function Diagnosis.format(snapshot)
   local lines = {
     "Arch Maintenance Center diagnosis",
     "Generated: " .. formatUtc(snapshot.collectedAtMs),
-    "Source: real",
+    isFixture(snapshot)
+      and "Source: fixture (" .. tostring(fixtureId(snapshot)) .. ")"
+      or "Source: real",
     "Platform: " .. tostring(platform.state or "unknown") .. (platform.id and " (" .. safePlatformId(platform.id) .. ")" or ""),
   }
   local health = snapshot.health
@@ -174,7 +185,7 @@ function Diagnosis.format(snapshot)
 end
 
 function Diagnosis.commands(snapshot)
-  if not isSupportedPlatform(snapshot) then
+  if isFixture(snapshot) or not isSupportedPlatform(snapshot) then
     return ""
   end
   local commands = {

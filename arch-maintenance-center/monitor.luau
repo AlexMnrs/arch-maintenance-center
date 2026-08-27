@@ -3,7 +3,9 @@
 local Command = require("./lib/command.luau")
 local Collection = require("./lib/collection.luau")
 local Cleanup = require("./lib/cleanup.luau")
+local Demo = require("./lib/demo.luau")
 local Disk = require("./lib/disk.luau")
+local Fixtures = require("./lib/fixtures.luau")
 local Health = require("./lib/health.luau")
 local Logs = require("./lib/logs.luau")
 local Platform = require("./lib/platform.luau")
@@ -13,6 +15,16 @@ local Services = require("./lib/services.luau")
 local Settings = require("./lib/settings.luau")
 local Updates = require("./lib/updates.luau")
 
+local FIXTURE_MODELS = {
+  Cleanup = Cleanup,
+  Disk = Disk,
+  Health = Health,
+  Logs = Logs,
+  Recommendations = Recommendations,
+  Services = Services,
+  Updates = Updates,
+}
+
 local CHECKUPDATES_TIMEOUT_MS = 30000
 local LOCAL_COMMAND_TIMEOUT_MS = 5000
 local COLLECTION_TIMEOUT_MS = 35000
@@ -21,22 +33,43 @@ local MODULE_NAMES = { "updates", "services", "disk", "cleanup", "logs" }
 
 local gate = Refresh.new()
 local started = false
+local developerModeEnabled = false
+local demoFixtureId = nil
 local refreshIntervalMs = Settings.refreshIntervalMs("15")
 local nextRefreshAtMs = nil
 local run = nil
 local runSequence = 0
 local platformCheckActive = false
-local snapshot = {
-  source = { kind = "real" },
-  refreshing = false,
-  collectedAtMs = nil,
-  modules = {},
-  platform = { state = "checking" },
-  recommendations = {},
-  health = Health.aggregate({}, {}),
-}
+local modeGeneration = 0
+local sessionStartedAtMs = noctalia.nowMs()
+
+local function realSnapshot()
+  return {
+    source = { kind = "real" },
+    refreshing = false,
+    collectedAtMs = nil,
+    modules = {},
+    platform = { state = "checking" },
+    recommendations = {},
+    health = Health.aggregate({}, {}),
+  }
+end
+
+local function buildFixture(id, nowMs)
+  return Fixtures.build(id, nowMs, FIXTURE_MODELS)
+end
+
+local snapshot = realSnapshot()
 
 local refresh
+
+local function invalidateActivity()
+  modeGeneration = modeGeneration + 1
+  run = nil
+  platformCheckActive = false
+  nextRefreshAtMs = nil
+  gate = Refresh.new()
+end
 
 local function publish()
   snapshot.recommendations = Recommendations.fromModules(snapshot.modules)
@@ -364,6 +397,9 @@ local function clearUnsupportedPlatform(platform)
 end
 
 local function checkPlatform()
+  if demoFixtureId ~= nil then
+    return
+  end
   if platformCheckActive then
     snapshot.refreshing = true
     publish()
@@ -371,6 +407,7 @@ local function checkPlatform()
   end
 
   platformCheckActive = true
+  local generation = modeGeneration
   run = nil
   nextRefreshAtMs = nil
   snapshot.platform = { state = "checking" }
@@ -381,6 +418,9 @@ local function checkPlatform()
   publish()
 
   local accepted = noctalia.readFileAsync("/etc/os-release", function(contents, readError)
+    if not Demo.acceptRealCallback(generation, modeGeneration, demoFixtureId) then
+      return
+    end
     platformCheckActive = false
     if contents == nil then
       clearUnsupportedPlatform({ state = "error", detail = readError and "read_failed" or "missing_output" })
@@ -393,12 +433,15 @@ local function checkPlatform()
     end
   end)
   if not accepted then
+    if not Demo.acceptRealCallback(generation, modeGeneration, demoFixtureId) then
+      return
+    end
     platformCheckActive = false
     clearUnsupportedPlatform({ state = "error", detail = "read_rejected" })
   end
 end
 
-refresh = function()
+local function refreshReal()
   if snapshot.platform == nil or snapshot.platform.state ~= "supported" or snapshot.platform.id ~= "arch" then
     checkPlatform()
     return
@@ -423,9 +466,53 @@ refresh = function()
   collectLogs(checkedAtMs, function(value) finishModule(runId, "logs", value) end)
 end
 
+refresh = function()
+  if demoFixtureId ~= nil then
+    Demo.routeRefresh(
+      demoFixtureId,
+      noctalia.nowMs(),
+      buildFixture,
+      function(fixture)
+        snapshot = fixture
+        publish()
+      end,
+      refreshReal
+    )
+    return
+  end
+  refreshReal()
+end
+
+local function selectFixture(id)
+  invalidateActivity()
+  demoFixtureId = id
+  local fixture = buildFixture(id, noctalia.nowMs())
+  if fixture == nil then
+    demoFixtureId = nil
+    snapshot = realSnapshot()
+    publish()
+    refresh()
+    return
+  end
+  snapshot = fixture
+  publish()
+end
+
+local function selectRealSystem()
+  invalidateActivity()
+  demoFixtureId = nil
+  snapshot = realSnapshot()
+  publish()
+  refresh()
+end
+
 local function configureRefreshInterval()
   refreshIntervalMs = Settings.refreshIntervalMs(noctalia.getConfig("refresh_interval_minutes"))
   noctalia.setUpdateInterval(WATCHDOG_TICK_MS)
+end
+
+local function configureDeveloperMode()
+  developerModeEnabled = noctalia.getConfig("developer_mode") == true
 end
 
 local function moduleDeadlineResult(name, checkedAtMs)
@@ -465,8 +552,19 @@ local function ensureStarted()
 end
 
 configureRefreshInterval()
+configureDeveloperMode()
 noctalia.state.watch("refresh_request", function(_value)
   refresh()
+end)
+noctalia.state.watch("demo_request", function(value)
+  local id = Demo.requestedId(value, developerModeEnabled, sessionStartedAtMs, Fixtures.contains)
+  if id == "real" then
+    if demoFixtureId ~= nil then
+      selectRealSystem()
+    end
+  elseif id ~= nil then
+    selectFixture(id)
+  end
 end)
 ensureStarted()
 
@@ -479,12 +577,21 @@ function update()
 end
 
 function onEnable()
-  ensureStarted()
+  if started and demoFixtureId ~= nil then
+    selectRealSystem()
+  else
+    ensureStarted()
+  end
 end
 
 function onConfigChanged()
   configureRefreshInterval()
-  refresh()
+  configureDeveloperMode()
+  if not developerModeEnabled and demoFixtureId ~= nil then
+    selectRealSystem()
+  else
+    refresh()
+  end
 end
 
 function onIpc(event, _payload)

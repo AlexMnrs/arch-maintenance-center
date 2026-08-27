@@ -21,6 +21,14 @@ options = [
   { value = "60", label_key = "settings.refresh_interval.options.sixty" },
 ]
 
+[[setting]]
+key = "developer_mode"
+type = "bool"
+label_key = "settings.developer_mode.label"
+description_key = "settings.developer_mode.description"
+default = false
+advanced = true
+
 [[widget]]
 id = "health"
 entry = "widget.luau"

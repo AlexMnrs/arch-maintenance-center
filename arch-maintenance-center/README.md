@@ -28,6 +28,12 @@ failed units, high root filesystem usage, and orphan packages open their
 existing detail views. Recent journal errors and storage totals remain
 informational and do not become recommendations by themselves.
 
+For visual development, enable the advanced `Developer tools` setting. The
+panel then exposes a temporary `Data source` selector with healthy, warning,
+critical, incomplete, loading, and platform fixtures. Demo snapshots are
+explicitly marked, affect the widget as well as the panel, never run collectors,
+and reset to `Real system` when the plugin reloads. Copying the diagnosis stays
+available for review; system and upgrade commands are disabled for fixtures.
 
 ## Requirements
 

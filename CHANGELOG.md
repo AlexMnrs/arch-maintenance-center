@@ -35,6 +35,9 @@ cuando comience a publicar versiones.
 - Diagnóstico redactado y comandos de inspección copiables.
 - Configuración de refresco periódico, IPC de refresco y pruebas automatizadas
   en Luau.
+- Herramientas de desarrollo opcionales con diez fixtures visuales para revisar
+  estados saludables, recomendaciones, advertencias, errores, carga y
+  plataformas incompatibles sin tocar el sistema.
 - Licencia MIT y flujo de integración continua para GitHub.
 
 ### Changed
@@ -47,6 +50,9 @@ cuando comience a publicar versiones.
 - El resumen global distingue mantenimiento disponible de advertencias y
   condiciones críticas; una cantidad de actualizaciones no se convierte por sí
   sola en alerta.
+- Los snapshots distinguen datos reales de fixtures demo; el selector temporal
+  se reinicia a `Real system` al recargar el plugin y mantiene panel y widget
+  sincronizados.
 - Updates muestra una fecha y hora absoluta para la última actualización
   completa y para la comprobación disponible, en lugar de solo días
   transcurridos.
@@ -84,5 +90,14 @@ cuando comience a publicar versiones.
   pueden alterar una recopilación posterior.
 - Un fallo al comprobar unidades de usuario ya no se presenta como un
   diagnóstico completo.
+- Los entrypoints usan rutas `require` literales compatibles con Noctalia API
+  24, sin fallbacks que oculten errores; el widget ya no depende de la cadena
+  de construcción de fixtures demo.
 - El patrón que analiza la salida de `checkupdates` ya no contiene un escape
   inválido para el analizador de Luau.
+
+### Security
+
+- Los fixtures no ejecutan colectores ni habilitan comandos de inspección o
+  actualización; el diagnóstico sintético se identifica explícitamente como
+  demo antes de copiarse.
