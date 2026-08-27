@@ -6,6 +6,9 @@ El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.1.
 y el proyecto seguirá [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 cuando comience a publicar versiones.
 
+El plugin y el catálogo declaran actualmente la versión `0.3.0`. Mientras no
+exista una release publicada, los cambios permanecen bajo `Unreleased`.
+
 ## Unreleased
 
 ### Added
@@ -42,6 +45,9 @@ cuando comience a publicar versiones.
 
 ### Changed
 
+- La documentación pública y del proyecto queda sincronizada con el contrato
+  implementado en `0.3.0`: módulos, límites de recopilación, estados,
+  recomendaciones, ajustes, fixtures, comandos, refresco y validación en CI.
 - El mantenimiento recomendado se calcula mediante acciones concretas en vez
   de contar todos los módulos informativos; los errores del journal ya no
   elevan por sí solos el resumen de mantenimiento.
