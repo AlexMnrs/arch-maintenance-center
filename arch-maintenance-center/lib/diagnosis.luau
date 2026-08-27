@@ -1,11 +1,12 @@
 local Diagnosis = {}
 
+
 local function safeNumber(value, fallback)
-  return type(value) == "number" and value or fallback
+  return type(value) == "number" and value == value and value ~= math.huge and value >= 0 and value or fallback
 end
 
 local function formatUtc(value)
-  if type(value) ~= "number" or value < 0 then
+  if type(value) ~= "number" or value ~= value or value == math.huge or value == -math.huge or value < 0 then
     return "unknown"
   end
   return os.date("!%Y-%m-%dT%H:%M:%SZ", math.floor(value / 1000))
@@ -29,21 +30,76 @@ local function isSafeUnitName(value)
   return true
 end
 
+local function isSupportedPlatform(snapshot)
+  return type(snapshot) == "table"
+    and type(snapshot.platform) == "table"
+    and snapshot.platform.state == "supported"
+    and snapshot.platform.id == "arch"
+end
+
+local function safePlatformId(value)
+  if type(value) == "string" and #value <= 128 and string.match(value, "^[a-z0-9][a-z0-9._-]*$") ~= nil then
+    return value
+  end
+  return "unknown"
+end
+
+local function recommendationLine(value)
+  if type(value) ~= "table" or type(value.data) ~= "table" then
+    return nil
+  end
+  local data = value.data
+  if value.id == "updates_available" then
+    local line = "- updates_available: " .. tostring(safeNumber(data.count, 0)) .. " pending"
+    if type(data.daysSinceLastUpgrade) == "number"
+      and data.daysSinceLastUpgrade == data.daysSinceLastUpgrade
+      and data.daysSinceLastUpgrade ~= math.huge
+      and data.daysSinceLastUpgrade ~= -math.huge
+      and data.daysSinceLastUpgrade >= 0
+    then
+      line = line .. ", " .. tostring(math.floor(data.daysSinceLastUpgrade)) .. " days since full upgrade"
+    end
+    return line
+  elseif value.id == "failed_units" then
+    return "- failed_units: " .. tostring(safeNumber(data.count, 0))
+  elseif value.id == "low_disk_space" then
+    return "- low_disk_space: " .. tostring(math.floor(safeNumber(data.usagePercent, 0) + 0.5)) .. "% used"
+  elseif value.id == "orphan_packages" then
+    return "- orphan_packages: " .. tostring(safeNumber(data.count, 0))
+  end
+  return nil
+end
+
 function Diagnosis.format(snapshot)
   if type(snapshot) ~= "table" or type(snapshot.health) ~= "table" then
     return "Arch Maintenance Center diagnosis\nStatus: unavailable"
   end
 
-  local health = snapshot.health
+  local platform = type(snapshot.platform) == "table" and snapshot.platform or { state = "error", detail = "missing_platform" }
   local lines = {
     "Arch Maintenance Center diagnosis",
     "Generated: " .. formatUtc(snapshot.collectedAtMs),
-    "Status: " .. tostring(health.severity or "unknown"),
-    "Complete: " .. (health.complete == true and "yes" or "no"),
-    "Issues: " .. tostring(safeNumber(health.issueCount, 0)),
-    "Maintenance areas: " .. tostring(safeNumber(health.maintenanceCount, 0)),
-    "Unavailable modules: " .. tostring(safeNumber(health.unavailableCount, 0)),
+    "Source: real",
+    "Platform: " .. tostring(platform.state or "unknown") .. (platform.id and " (" .. safePlatformId(platform.id) .. ")" or ""),
   }
+  local health = snapshot.health
+  local recommendations = type(snapshot.recommendations) == "table" and snapshot.recommendations or {}
+  table.insert(lines, "Recommended actions: " .. tostring(safeNumber(health.recommendationCount, 0)))
+  for _, recommendation in ipairs(recommendations) do
+    local line = recommendationLine(recommendation)
+    if line ~= nil then
+      table.insert(lines, line)
+    end
+  end
+  if not isSupportedPlatform(snapshot) then
+    table.insert(lines, "Status: unavailable")
+    return table.concat(lines, "\n")
+  end
+
+  table.insert(lines, "Status: " .. tostring(health.severity or "unknown"))
+  table.insert(lines, "Complete: " .. (health.complete == true and "yes" or "no"))
+  table.insert(lines, "Issues: " .. tostring(safeNumber(health.issueCount, 0)))
+  table.insert(lines, "Unavailable modules: " .. tostring(safeNumber(health.unavailableCount, 0)))
 
   local modules = type(snapshot.modules) == "table" and snapshot.modules or {}
   local updates = modules.updates
@@ -118,6 +174,9 @@ function Diagnosis.format(snapshot)
 end
 
 function Diagnosis.commands(snapshot)
+  if not isSupportedPlatform(snapshot) then
+    return ""
+  end
   local commands = {
     "checkupdates --nocolor",
     "df -h /",

@@ -8,6 +8,7 @@ local Updates = require("./lib/updates.luau")
 local snapshot = noctalia.state.get("snapshot")
 local open = false
 local view = "overview"
+local recommendationsExpanded = false
 local tr = noctalia.tr
 
 local function rounded(value)
@@ -16,6 +17,20 @@ end
 
 local function moduleValue(name)
   return snapshot ~= nil and snapshot.modules ~= nil and snapshot.modules[name] or nil
+end
+
+local function platformValue()
+  return snapshot ~= nil and type(snapshot.platform) == "table" and snapshot.platform or nil
+end
+
+local function platformSupported()
+  local platform = platformValue()
+  return platform ~= nil and platform.state == "supported" and platform.id == "arch"
+end
+
+
+local function commandsEnabled()
+  return platformSupported()
 end
 
 local function formatDateTime(value)
@@ -31,6 +46,15 @@ end
 local function healthPresentation()
   if snapshot == nil or snapshot.health == nil then
     return "shield-exclamation", "surface_variant", "on_surface_variant", tr("status.loading"), tr("global.waiting")
+  end
+
+  local platform = platformValue()
+  if platform == nil or platform.state == "checking" then
+    return "shield-search", "surface_variant", "on_surface_variant", tr("platform.checking"), tr("platform.checking_detail")
+  elseif platform.state == "unsupported" then
+    return "shield-x", "surface_variant", "on_surface_variant", tr("platform.unsupported"), tr("platform.unsupported_detail")
+  elseif platform.state ~= "supported" or platform.id ~= "arch" then
+    return "shield-exclamation", "surface_variant", "on_surface_variant", tr("platform.error"), tr("platform.error_detail")
   end
 
   local health = snapshot.health
@@ -53,10 +77,10 @@ local function healthPresentation()
     detail = tr(key, { count = health.issueCount })
   elseif health.complete ~= true then
     glyph, fill, color, title = "shield-exclamation", "surface_variant", "on_surface_variant", tr("global.incomplete")
-  elseif (tonumber(health.maintenanceCount) or 0) > 0 then
-    local key = health.maintenanceCount == 1 and "global.maintenance_one" or "global.maintenance"
+  elseif (tonumber(health.recommendationCount) or 0) > 0 then
+    local key = health.recommendationCount == 1 and "global.recommendation_one" or "global.recommendations"
     glyph, fill, color, title = "tool", "surface_variant", "on_surface_variant", tr("global.maintenance_available")
-    detail = tr(key, { count = health.maintenanceCount })
+    detail = tr(key, { count = health.recommendationCount })
   else
     detail = tr("global.no_issues")
   end
@@ -489,6 +513,104 @@ local function logsDetail()
   return children
 end
 
+local function recommendationPresentation(recommendation)
+  local data = type(recommendation.data) == "table" and recommendation.data or {}
+  if recommendation.id == "updates_available" then
+    local count = tonumber(data.count) or 0
+    local title = count == 1 and tr("recommendation.updates_one") or tr("recommendation.updates", { count = count })
+    local days = tonumber(data.daysSinceLastUpgrade)
+    local detail = days ~= nil and days >= 14
+      and tr("recommendation.updates_stale_detail", { days = rounded(days) })
+      or tr("recommendation.updates_detail")
+    return "package", recommendation.severity == "warning" and "tertiary" or "secondary", title, detail
+  elseif recommendation.id == "failed_units" then
+    local count = tonumber(data.count) or 0
+    local title = count == 1 and tr("recommendation.services_one") or tr("recommendation.services", { count = count })
+    return "server", "tertiary", title, tr("recommendation.services_detail")
+  elseif recommendation.id == "low_disk_space" then
+    local color = recommendation.severity == "critical" and "error" or "tertiary"
+    return "database", color, tr("recommendation.disk"), tr("recommendation.disk_detail", {
+      percent = rounded(data.usagePercent),
+      available = Bytes.format(tonumber(data.availableBytes) or -1),
+    })
+  elseif recommendation.id == "orphan_packages" then
+    local count = tonumber(data.count) or 0
+    local title = count == 1 and tr("recommendation.orphans_one") or tr("recommendation.orphans", { count = count })
+    return "package-off", "secondary", title, tr("recommendation.orphans_detail")
+  end
+  return "tool", "on_surface_variant", tr("status.unavailable"), ""
+end
+
+local function recommendationRow(recommendation, index)
+  local glyph, color, title, detail = recommendationPresentation(recommendation)
+  return ui.row({
+    key = "recommendation-" .. tostring(index) .. "-" .. tostring(recommendation.id),
+    gap = 10,
+    align = "center",
+    padding = 10,
+    fill = "surface_variant/0.28",
+    border = "outline/0.35",
+    borderWidth = 1,
+    radius = 9,
+    onClick = function()
+      view = recommendation.module
+      render()
+    end,
+  }, {
+    ui.glyph({ name = glyph, size = 20, color = color }),
+    ui.column({ gap = 2, flexGrow = 1 }, {
+      ui.label({ text = title, fontWeight = "bold", fontSize = 13, maxLines = 1 }),
+      ui.label({ text = detail, color = "on_surface_variant", fontSize = 11, maxLines = 2 }),
+    }),
+    ui.glyph({ name = "chevron-right", size = 16, color = "on_surface_variant" }),
+  })
+end
+
+local function recommendationsSection()
+  local recommendations = snapshot ~= nil and type(snapshot.recommendations) == "table" and snapshot.recommendations or {}
+  local health = snapshot ~= nil and snapshot.health or nil
+  local children = {
+    ui.label({ text = tr("recommendation.title"), fontSize = 14, fontWeight = "bold" }),
+  }
+  if #recommendations == 0 then
+    table.insert(children, ui.label({
+      text = health ~= nil and health.complete == true and tr("recommendation.empty") or tr("recommendation.empty_partial"),
+      color = "on_surface_variant",
+      fontSize = 11,
+      maxLines = 2,
+    }))
+  else
+    local limit = recommendationsExpanded and #recommendations or math.min(3, #recommendations)
+    for index = 1, limit do
+      table.insert(children, recommendationRow(recommendations[index], index))
+    end
+    if #recommendations > 3 then
+      table.insert(children, ui.button({
+        text = recommendationsExpanded and tr("action.show_less") or tr("action.show_all", { count = #recommendations }),
+        glyph = recommendationsExpanded and "chevron-up" or "chevron-down",
+        fontSize = 11,
+        controlSize = "sm",
+        variant = "ghost",
+        onClick = function()
+          recommendationsExpanded = not recommendationsExpanded
+          render()
+        end,
+      }))
+    end
+  end
+  return ui.column({ gap = 8 }, children)
+end
+
+local function platformBody()
+  local platform = platformValue()
+  local message = (platform == nil or platform.state == "checking") and tr("platform.checking_detail")
+    or (platform.state == "unsupported" and tr("platform.unsupported_detail") or tr("platform.error_detail"))
+  return {
+    banner(),
+    ui.label({ text = message, color = "on_surface_variant", maxLines = 4 }),
+  }
+end
+
 local function overviewBody()
   local refreshing = snapshot ~= nil and snapshot.refreshing == true
   local statusLine = refreshing
@@ -496,6 +618,7 @@ local function overviewBody()
     or lastUpdated()
   return {
     banner(),
+    recommendationsSection(),
     ui.label({ text = statusLine, fontSize = 10, color = "on_surface_variant", textAlign = "end" }),
     ui.row({ gap = 12, align = "stretch" }, { updatesCard(), servicesCard() }),
     ui.row({ gap = 12, align = "stretch" }, { diskCard(), logsCard() }),
@@ -515,7 +638,7 @@ end
 
 local function actions()
   if view == "overview" then
-    return ui.row({ gap = 8, justify = "end", paddingH = 18, paddingV = 8 }, {
+    local children = {
       ui.button({
         text = tr("action.copy_diagnosis"),
         glyph = "clipboard",
@@ -526,7 +649,9 @@ local function actions()
         flexGrow = 1,
         onClick = "onCopyDiagnosis",
       }),
-      ui.button({
+    }
+    if platformSupported() then
+      table.insert(children, ui.button({
         text = tr("action.copy_commands"),
         glyph = "terminal-2",
         fontSize = 12,
@@ -535,8 +660,9 @@ local function actions()
         variant = "outline",
         flexGrow = 1,
         onClick = "onCopyCommands",
-      }),
-    })
+      }))
+    end
+    return ui.row({ gap = 8, justify = "end", paddingH = 18, paddingV = 8 }, children)
   end
 
   local children = {
@@ -594,7 +720,7 @@ function render()
     onClick = "onRefreshClicked",
   }))
 
-  local bodyChildren = view == "overview" and overviewBody() or detailBody()
+  local bodyChildren = not platformSupported() and platformBody() or (view == "overview" and overviewBody() or detailBody())
   local body = ui.scroll({ gap = 12, paddingH = 18, paddingV = 14, flexGrow = 1, align = "stretch" }, bodyChildren)
   panel.render(ui.column({ gap = 0, fill = "surface", flexGrow = 1, align = "stretch" }, {
     ui.row({ align = "center", gap = 12, paddingH = 18, paddingV = 11 }, headerChildren),
@@ -608,6 +734,7 @@ end
 function onOpen(_context)
   open = true
   view = "overview"
+  recommendationsExpanded = false
   render()
 end
 

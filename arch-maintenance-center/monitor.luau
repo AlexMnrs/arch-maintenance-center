@@ -6,7 +6,9 @@ local Cleanup = require("./lib/cleanup.luau")
 local Disk = require("./lib/disk.luau")
 local Health = require("./lib/health.luau")
 local Logs = require("./lib/logs.luau")
+local Platform = require("./lib/platform.luau")
 local Refresh = require("./lib/refresh.luau")
+local Recommendations = require("./lib/recommendations.luau")
 local Services = require("./lib/services.luau")
 local Settings = require("./lib/settings.luau")
 local Updates = require("./lib/updates.luau")
@@ -23,17 +25,22 @@ local refreshIntervalMs = Settings.refreshIntervalMs("15")
 local nextRefreshAtMs = nil
 local run = nil
 local runSequence = 0
+local platformCheckActive = false
 local snapshot = {
+  source = { kind = "real" },
   refreshing = false,
   collectedAtMs = nil,
   modules = {},
-  health = Health.aggregate({}),
+  platform = { state = "checking" },
+  recommendations = {},
+  health = Health.aggregate({}, {}),
 }
 
 local refresh
 
 local function publish()
-  snapshot.health = Health.aggregate(snapshot.modules)
+  snapshot.recommendations = Recommendations.fromModules(snapshot.modules)
+  snapshot.health = Health.aggregate(snapshot.modules, snapshot.recommendations)
   noctalia.state.set("snapshot", snapshot)
 end
 
@@ -344,7 +351,58 @@ local function collectDisk(checkedAtMs, done)
   end
 end
 
+local function clearUnsupportedPlatform(platform)
+  run = nil
+  nextRefreshAtMs = nil
+  snapshot.platform = platform
+  snapshot.source = { kind = "real" }
+  snapshot.modules = {}
+  snapshot.recommendations = {}
+  snapshot.collectedAtMs = nil
+  snapshot.refreshing = false
+  publish()
+end
+
+local function checkPlatform()
+  if platformCheckActive then
+    snapshot.refreshing = true
+    publish()
+    return
+  end
+
+  platformCheckActive = true
+  run = nil
+  nextRefreshAtMs = nil
+  snapshot.platform = { state = "checking" }
+  snapshot.modules = {}
+  snapshot.recommendations = {}
+  snapshot.collectedAtMs = nil
+  snapshot.refreshing = true
+  publish()
+
+  local accepted = noctalia.readFileAsync("/etc/os-release", function(contents, readError)
+    platformCheckActive = false
+    if contents == nil then
+      clearUnsupportedPlatform({ state = "error", detail = readError and "read_failed" or "missing_output" })
+      return
+    end
+    local platform = Platform.classify(contents)
+    clearUnsupportedPlatform(platform)
+    if platform.state == "supported" then
+      refresh()
+    end
+  end)
+  if not accepted then
+    platformCheckActive = false
+    clearUnsupportedPlatform({ state = "error", detail = "read_rejected" })
+  end
+end
+
 refresh = function()
+  if snapshot.platform == nil or snapshot.platform.state ~= "supported" or snapshot.platform.id ~= "arch" then
+    checkPlatform()
+    return
+  end
   if not Refresh.request(gate) then
     snapshot.refreshing = true
     publish()

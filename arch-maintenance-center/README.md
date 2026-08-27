@@ -12,16 +12,27 @@ A read-only Arch Linux health dashboard for the Noctalia v5 bar.
 - root filesystem usage, pacman cache, orphan packages, and journal storage;
 - recent error-priority journal events visible to the current user.
 
+Before running any collection, the service reads `/etc/os-release` and requires
+`ID=arch`. On another distribution, or when that file cannot be verified, the
+panel explains that the diagnosis is unavailable and does not offer Arch
+maintenance commands.
+
 The bar widget opens a native Noctalia panel with the current diagnosis. The
 panel can open details for each area, copy a redacted summary, and copy
 read-only inspection commands. It never runs updates, cleanup, repairs, or
 privileged commands. The Updates detail can copy `sudo pacman -Syu` after an
 explicit warning; it does not run the command.
 
+The overview also presents evidence-backed recommendations. Pending updates,
+failed units, high root filesystem usage, and orphan packages open their
+existing detail views. Recent journal errors and storage totals remain
+informational and do not become recommendations by themselves.
+
+
 ## Requirements
 
 - Noctalia v5.0.0-beta.9 or newer with plugin API 24;
-- Arch Linux with systemd;
+- Arch Linux with `ID=arch` in `/etc/os-release` and systemd;
 - `pacman-contrib` for the `checkupdates` command;
 - `jq` for bounded journal preprocessing;
 - `bash`, `awk`, `grep`, `tail`, `du`, `pacman`, and `journalctl`

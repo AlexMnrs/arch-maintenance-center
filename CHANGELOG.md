@@ -10,6 +10,10 @@ cuando comience a publicar versiones.
 
 ### Added
 
+- Lista compacta y navegable de acciones recomendadas para actualizaciones,
+  unidades fallidas, poco espacio en `/` y paquetes huérfanos.
+- Comprobación previa de `/etc/os-release` que limita el diagnóstico a Arch
+  Linux confirmado mediante `ID=arch`.
 - Vistas de detalle navegables para Updates, Services, Disk & Cleanup y System
   Logs, sin cambiar el tamaño ni la API del panel.
 - Muestra acotada de paquetes oficiales pendientes y de unidades fallidas, con
@@ -35,6 +39,11 @@ cuando comience a publicar versiones.
 
 ### Changed
 
+- El mantenimiento recomendado se calcula mediante acciones concretas en vez
+  de contar todos los módulos informativos; los errores del journal ya no
+  elevan por sí solos el resumen de mantenimiento.
+- El diagnóstico copiable incluye la plataforma y las acciones recomendadas,
+  y deja de ofrecer comandos de Arch cuando la plataforma no es compatible.
 - El resumen global distingue mantenimiento disponible de advertencias y
   condiciones críticas; una cantidad de actualizaciones no se convierte por sí
   sola en alerta.

@@ -10,15 +10,15 @@ local RANK = {
 
 local ORDER = { "updates", "services", "disk", "cleanup", "logs" }
 
-function Health.aggregate(modules)
+function Health.aggregate(modules, recommendations)
   modules = type(modules) == "table" and modules or {}
+  recommendations = type(recommendations) == "table" and recommendations or {}
   local severity = "ok"
   local rank = 0
   local complete = true
   local issueCount = 0
   local unavailableCount = 0
   local unavailableModules = {}
-  local maintenanceCount = 0
 
   for _, name in ipairs(ORDER) do
     local module = modules[name]
@@ -35,8 +35,6 @@ function Health.aggregate(modules)
       end
       if module.severity == "warning" or module.severity == "critical" then
         issueCount = issueCount + 1
-      elseif module.severity == "info" then
-        maintenanceCount = maintenanceCount + 1
       end
     end
   end
@@ -47,7 +45,7 @@ function Health.aggregate(modules)
     issueCount = issueCount,
     unavailableCount = unavailableCount,
     unavailableModules = unavailableModules,
-    maintenanceCount = maintenanceCount,
+    recommendationCount = #recommendations,
   }
 end
 

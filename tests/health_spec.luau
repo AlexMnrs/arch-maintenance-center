@@ -15,14 +15,17 @@ local function full(updates, services, disk, cleanup, logs)
   }
 end
 
-local healthy = Health.aggregate(full())
+local healthy = Health.aggregate(full(), {})
 A.equal(healthy.severity, "ok", "informational module does not warn globally")
 A.equal(healthy.complete, true, "all modules complete")
-A.equal(healthy.maintenanceCount, 0, "clean modules need no maintenance")
+A.equal(healthy.recommendationCount, 0, "clean modules need no recommendations")
 
-local maintenance = Health.aggregate(full(module("ready", "info")))
-A.equal(maintenance.severity, "ok", "maintenance stays distinct from warning")
-A.equal(maintenance.maintenanceCount, 1, "informational module is counted")
+local informational = Health.aggregate(full(module("ready", "info")), {})
+A.equal(informational.severity, "ok", "information stays distinct from warning")
+A.equal(informational.recommendationCount, 0, "informational modules do not create recommendations")
+
+local recommended = Health.aggregate(full(module("ready", "info")), { { id = "updates_available" } })
+A.equal(recommended.recommendationCount, 1, "recommendations are counted separately")
 
 local warning = Health.aggregate(full(module("ready", "warning")))
 A.equal(warning.severity, "warning", "warning propagated")

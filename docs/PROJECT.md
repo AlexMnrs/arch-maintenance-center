@@ -33,6 +33,7 @@ hardware concreto.
 - Sustituir a `pacman`, `systemctl`, `journalctl` u otras herramientas del
   sistema.
 - Prometer soporte para otras distribuciones antes de validar Arch Linux.
+- Aceptar derivadas de Arch solo por declarar `ID_LIKE=arch`.
 - Diagnóstico predictivo o interpretación generativa de logs sin una política
   explícita de privacidad y calidad.
 
@@ -82,6 +83,9 @@ hardware concreto.
 
 - Plataforma: Arch Linux con `systemd` sobre Noctalia v5 beta.
 - Compatibilidad mínima: Noctalia `v5.0.0-beta.9`, plugin API 24.
+- Plataforma comprobada: el servicio lee `/etc/os-release` de forma asíncrona
+  y solo recopila datos cuando `ID=arch`; una plataforma incompatible o no
+  verificable no ejecuta colectores ni ofrece comandos de Arch.
 - Lenguaje: Luau con módulos puros comprobables fuera de Noctalia.
 - Arquitectura: servicio de recopilación, estado compartido en memoria, widget
   de barra y panel declarativo.
@@ -122,11 +126,14 @@ no se copian al diagnóstico: este contiene únicamente conteos, truncamiento y
 disponibilidad de los ámbitos.
 
 El estado global distingue la severidad de los datos de mantenimiento: una
-señal `info` produce “Maintenance available”, mientras que solo `warning` y
-`critical` elevan la atención. El número de actualizaciones pendientes no es
-por sí solo una advertencia; se mantiene el umbral de 14 días desde una
-actualización completa para dicha clasificación. Los módulos incompletos se
-declaran en el resumen junto a la severidad conocida.
+señal `info` no produce por sí sola una recomendación, mientras que solo
+`warning` y `critical` elevan la atención. Las acciones recomendadas se derivan
+de señales concretas: actualizaciones pendientes, unidades fallidas, disco raíz
+por encima del 80 % y paquetes huérfanos. Los errores recientes del journal,
+la caché y el tamaño del journal se mantienen como evidencia o contexto. Una
+actualización pendiente es informativa, pero pasa a advertencia tras 14 días
+desde la última actualización completa. Los módulos incompletos se declaran en
+el resumen junto a la severidad conocida.
 
 Los detalles de Updates incluyen el comando `sudo pacman -Syu` únicamente
 como texto copiable y con advertencia; no se añade a los comandos generales de

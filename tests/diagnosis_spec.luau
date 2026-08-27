@@ -3,7 +3,12 @@ local Diagnosis = require("../arch-maintenance-center/lib/diagnosis")
 
 local snapshot = {
   collectedAtMs = 1787745600000,
-  health = { severity = "warning", complete = false, issueCount = 1, unavailableCount = 1 },
+  platform = { state = "supported", id = "arch" },
+  health = { severity = "warning", complete = false, issueCount = 1, recommendationCount = 2, unavailableCount = 1 },
+  recommendations = {
+    { id = "updates_available", data = { count = 1, daysSinceLastUpgrade = 20 } },
+    { id = "orphan_packages", data = { count = 1 } },
+  },
   modules = {
     updates = { state = "ready", data = { count = 1, lastUpgradeMs = 1787742000000 } },
     services = {
@@ -41,6 +46,10 @@ local snapshot = {
 
 local diagnosis = Diagnosis.format(snapshot)
 A.truthy(string.find(diagnosis, "Complete: no", 1, true), "incomplete diagnosis is explicit")
+A.truthy(string.find(diagnosis, "Source: real", 1, true), "legacy snapshot source is real")
+A.truthy(string.find(diagnosis, "Platform: supported (arch)", 1, true), "supported platform is recorded")
+A.truthy(string.find(diagnosis, "Recommended actions: 2", 1, true), "action count is recorded")
+A.truthy(string.find(diagnosis, "updates_available: 1 pending", 1, true), "safe update action included")
 A.truthy(string.find(diagnosis, "Last full upgrade: 2026-08-26T", 1, true), "upgrade timestamp is absolute")
 A.truthy(string.find(diagnosis, "docker.service", 1, true), "safe service included")
 A.equal(string.find(diagnosis, "rm.service", 1, true), nil, "malicious service excluded")
@@ -57,5 +66,18 @@ A.equal(string.find(commands, "sudo", 1, true), nil, "no privileged commands")
 A.equal(string.find(commands, "rm.service", 1, true), nil, "malicious command excluded")
 A.truthy(string.find(commands, "journalctl --disk-usage", 1, true), "cleanup inspection included")
 A.equal(Diagnosis.shellQuote("it's"), "'it'\"'\"'s'", "single quote escaped")
+
+local unsupported = {
+  collectedAtMs = 1,
+  platform = { state = "unsupported", id = "fedora" },
+  health = { severity = "ok", complete = true },
+  modules = snapshot.modules,
+}
+local unsupportedDiagnosis = Diagnosis.format(unsupported)
+A.truthy(string.find(unsupportedDiagnosis, "Platform: unsupported (fedora)", 1, true), "unsupported platform is explicit")
+A.truthy(string.find(unsupportedDiagnosis, "Recommended actions: 0", 1, true), "unsupported diagnosis keeps action count")
+A.truthy(string.find(unsupportedDiagnosis, "Status: unavailable", 1, true), "unsupported diagnosis is unavailable")
+A.equal(Diagnosis.commands(unsupported), "", "unsupported platforms receive no Arch commands")
+
 
 print("diagnosis_spec passed")
