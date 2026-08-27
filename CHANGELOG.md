@@ -1,103 +1,100 @@
 # Changelog
 
-Todos los cambios notables de este proyecto se documentarán en este archivo.
+All notable changes to this project will be documented in this file.
 
-El formato está basado en [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
-y el proyecto seguirá [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
-cuando comience a publicar versiones.
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and the project will follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+when it begins publishing releases.
+
+The plugin and catalog currently declare version `0.3.0`. Until a release is
+published, changes remain under `Unreleased`.
 
 ## Unreleased
 
 ### Added
 
-- Lista compacta y navegable de acciones recomendadas para actualizaciones,
-  unidades fallidas, poco espacio en `/` y paquetes huérfanos.
-- Comprobación previa de `/etc/os-release` que limita el diagnóstico a Arch
-  Linux confirmado mediante `ID=arch`.
-- Vistas de detalle navegables para Updates, Services, Disk & Cleanup y System
-  Logs, sin cambiar el tamaño ni la API del panel.
-- Muestra acotada de paquetes oficiales pendientes y de unidades fallidas, con
-  indicadores cuando hay más elementos de los que se muestran.
-- Información de caché de pacman, paquetes huérfanos y espacio del journal.
-- Eventos de error recientes y visibles del journal de sistema y de usuario,
-  limitados por ámbito y presentados como evidencia informativa.
-- Botón específico para copiar el comando de actualización, con aviso explícito
-  de que modifica el sistema y no se ejecuta desde el plugin.
-- Pruebas de formato de bytes, limpieza, logs, truncamiento y redacción del
-  diagnóstico.
-- Definición inicial de la visión, el alcance y los principios de seguridad del
-  proyecto.
-- README público y referencia visual de la primera versión.
-- Instrucciones locales para agentes de desarrollo.
-- Plugin funcional para Noctalia v5 con widget de salud, panel y servicio de
-  monitorización.
-- Comprobaciones de actualizaciones, unidades fallidas y uso del disco raíz.
-- Diagnóstico redactado y comandos de inspección copiables.
-- Configuración de refresco periódico, IPC de refresco y pruebas automatizadas
-  en Luau.
-- Herramientas de desarrollo opcionales con diez fixtures visuales para revisar
-  estados saludables, recomendaciones, advertencias, errores, carga y
-  plataformas incompatibles sin tocar el sistema.
-- Licencia MIT y flujo de integración continua para GitHub.
+- A compact, navigable list of recommended actions for updates, failed units,
+  low space on `/`, and orphan packages.
+- A preflight check of `/etc/os-release` that limits diagnosis to Arch Linux
+  confirmed through `ID=arch`.
+- Navigable detail views for Updates, Services, Disk & Cleanup, and System Logs
+  without changing the panel size or API.
+- Bounded samples of pending official packages and failed units, with
+  indicators when more items exist than are shown.
+- Pacman cache, orphan-package, and journal-storage information.
+- Recent visible journal error events, bounded per scope and presented as
+  informational evidence.
+- A dedicated button for copying the upgrade command, with an explicit warning
+  that it changes the system and is not executed by the plugin.
+- Tests for byte formatting, cleanup, logs, truncation, and diagnosis
+  redaction.
+- The initial project vision, scope, and safety principles.
+- A public README and first-version visual reference.
+- Local instructions for development agents.
+- A functional Noctalia v5 plugin with a health widget, panel, and monitoring
+  service.
+- Checks for updates, failed units, and root-disk usage.
+- A redacted diagnosis and copyable inspection commands.
+- Periodic refresh configuration, refresh IPC, and automated Luau tests.
+- Optional developer tools with ten visual fixtures for reviewing healthy,
+  recommendation, warning, error, loading, and incompatible-platform states
+  without touching the system.
+- An MIT license and GitHub continuous-integration workflow.
 
 ### Changed
 
-- El mantenimiento recomendado se calcula mediante acciones concretas en vez
-  de contar todos los módulos informativos; los errores del journal ya no
-  elevan por sí solos el resumen de mantenimiento.
-- El diagnóstico copiable incluye la plataforma y las acciones recomendadas,
-  y deja de ofrecer comandos de Arch cuando la plataforma no es compatible.
-- El resumen global distingue mantenimiento disponible de advertencias y
-  condiciones críticas; una cantidad de actualizaciones no se convierte por sí
-  sola en alerta.
-- Los snapshots distinguen datos reales de fixtures demo; el selector temporal
-  se reinicia a `Real system` al recargar el plugin y mantiene panel y widget
-  sincronizados.
-- Updates muestra una fecha y hora absoluta para la última actualización
-  completa y para la comprobación disponible, en lugar de solo días
-  transcurridos.
-- El diagnóstico copiable incorpora conteos y disponibilidad de Cleanup y Logs
-  sin incluir mensajes libres del journal.
-- El panel explica qué módulo impide completar el diagnóstico, distingue la
-  primera carga de un resultado incompleto y aclara los ámbitos de `systemd`
-  comprobados por Services.
-- Los controles y colores del panel siguen las proporciones y los roles de
-  paleta nativos de Noctalia para adaptarse al tema activo; la hora del último
-  diagnóstico respeta también el formato configurado por el usuario.
+- Public and project documentation is synchronized with the `0.3.0`
+  implementation contract: modules, collection limits, states,
+  recommendations, settings, fixtures, commands, refresh behavior, and CI
+  validation.
+- Recommended maintenance is calculated from concrete actions instead of all
+  informational modules; journal errors no longer raise the maintenance summary
+  by themselves.
+- The copyable diagnosis includes the platform and recommended actions, and no
+  longer offers Arch commands on an incompatible platform.
+- The global summary distinguishes available maintenance from warnings and
+  critical conditions; an update count does not become an alert by itself.
+- Snapshots distinguish real data from demo fixtures; the temporary selector
+  resets to `Real system` when the plugin reloads and keeps the panel and widget
+  synchronized.
+- Updates shows an absolute date and time for the last full upgrade and for the
+  availability check instead of only elapsed days.
+- The copyable diagnosis includes Cleanup and Logs counts and availability
+  without including free-form journal messages.
+- The panel explains which module prevents a complete diagnosis, distinguishes
+  the first load from an incomplete result, and clarifies the `systemd` scopes
+  checked by Services.
+- Panel controls and colors follow Noctalia's native palette roles and
+  proportions for the active theme; the last-diagnosis time also follows the
+  user's configured format.
 
 ### Fixed
 
-- Logs preprocesa una única muestra JSON acotada por ámbito antes del callback,
-  evitando exceder el presupuesto de CPU de Luau al decodificar eventos.
-- La medición de caché omite los directorios privados `download-*` creados por
-  pacman, que antes hacían fallar `du` pese a producir un tamaño válido.
-- El estado de mantenimiento deja de usar roles de color no reconocidos por
-  Noctalia API 24.
-- Los ámbitos de logs disponibles ya no conservan detalles de error residuales
-  en el estado compartido.
-- El encabezado prioriza un diagnóstico incompleto sobre mantenimiento
-  informativo, y Disk & Cleanup deja visible qué fuentes de limpieza no se
-  pudieron consultar.
-- La recopilación de logs normaliza los mensajes localmente en vez de depender
-  de una opción opcional de `journalctl`, mejorando la compatibilidad.
-- La recopilación de Updates, Services y paquetes huérfanos limita el volumen
-  que llega a los callbacks de Noctalia.
-- Updates reduce la salida procesada a un único recuento y una sola línea de
-  `pacman.log`, para respetar el presupuesto de CPU de los callbacks de
-  Noctalia.
-- Un watchdog de 35 segundos termina las recopilaciones atascadas, publica el
-  diagnóstico incompleto y vuelve a habilitar Refresh; los callbacks tardíos no
-  pueden alterar una recopilación posterior.
-- Un fallo al comprobar unidades de usuario ya no se presenta como un
-  diagnóstico completo.
-- Los entrypoints usan rutas `require` literales compatibles con Noctalia API
-  24, sin fallbacks que oculten errores; el widget ya no depende de la cadena
-  de construcción de fixtures demo.
-- El patrón que analiza la salida de `checkupdates` ya no contiene un escape
-  inválido para el analizador de Luau.
+- Logs preprocesses one bounded JSON sample per scope before the callback,
+  avoiding Luau callback CPU-budget overruns while decoding events.
+- Cache measurement omits private `download-*` directories created by pacman,
+  which previously made `du` fail despite producing a valid size.
+- The maintenance state no longer uses color roles unknown to Noctalia API 24.
+- Available log scopes no longer retain stale error details in shared state.
+- The header prioritizes an incomplete diagnosis over informational maintenance,
+  and Disk & Cleanup keeps unavailable cleanup sources visible.
+- Log collection normalizes messages locally instead of relying on an optional
+  `journalctl` option, improving compatibility.
+- Updates, Services, and orphan-package collection limits the volume delivered
+  to Noctalia callbacks.
+- Updates reduces processed output to one count and one `pacman.log` line to
+  respect the Noctalia callback CPU budget.
+- A 35-second watchdog terminates stuck collections, publishes an incomplete
+  diagnosis, and re-enables Refresh; late callbacks cannot change a later
+  collection.
+- Failure to check user units is no longer presented as a complete diagnosis.
+- Entrypoints use literal `require` paths compatible with Noctalia API 24,
+  without fallbacks that hide errors; the widget no longer depends on the demo
+  fixture build chain.
+- The pattern that parses `checkupdates` output no longer contains an invalid
+  escape for the Luau parser.
 
 ### Security
 
-- Los fixtures no ejecutan colectores ni habilitan comandos de inspección o
-  actualización; el diagnóstico sintético se identifica explícitamente como
-  demo antes de copiarse.
+- Fixtures do not run collectors or enable inspection or upgrade commands; the
+  synthetic diagnosis is explicitly identified as demo data before it is copied.
