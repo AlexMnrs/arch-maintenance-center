@@ -20,6 +20,10 @@ La versión `0.3.0` implementa:
 
 - un estado global que diferencia sistema correcto, mantenimiento disponible,
   atención necesaria, condición crítica y recopilación incompleta;
+- una lista priorizada de acciones recomendadas, trazables a actualizaciones,
+  unidades fallidas, espacio insuficiente o paquetes huérfanos;
+- una comprobación previa de plataforma que ejecuta el diagnóstico únicamente
+  cuando `/etc/os-release` confirma `ID=arch`;
 - actualizaciones de repositorios oficiales, con una muestra acotada y fecha de
   comprobación separada de la última actualización completa;
 - unidades de `systemd` fallidas, con detalle por ámbito y muestra acotada;
@@ -31,8 +35,8 @@ La versión `0.3.0` implementa:
   comandos de inspección fáciles de copiar;
 - refresco inicial, manual y programado.
 
-No incluye AUR, tamaños de descarga, análisis de warnings genéricos, red ni
-métricas de monitorización continua.
+No incluye AUR, tamaños de descarga, clasificación de warnings o logs,
+cálculo de espacio recuperable, red ni métricas de monitorización continua.
 
 ## Principio de seguridad
 
@@ -41,12 +45,13 @@ pero no ejecuta operaciones privilegiadas, limpiezas, actualizaciones ni
 reparaciones. El detalle de Updates puede copiar `sudo pacman -Syu` tras
 explicar su efecto; esa acción nunca se ejecuta desde Noctalia.
 
+
 ## Estado del proyecto
 
 El plugin utiliza Luau, la API 24 de Noctalia v5 y una arquitectura de servicio,
 widget y panel inspirada en
 [GitHub Activity](https://github.com/AlexMnrs/github-activity). Requiere Arch
-Linux con `systemd`; `pacman-contrib` habilita la comprobación segura de
+Linux confirmado por `ID=arch` y con `systemd`; `pacman-contrib` habilita la comprobación segura de
 actualizaciones mediante `checkupdates`. Los detalles de logs incluyen solo
 los eventos que el usuario actual puede leer y el diagnóstico copiable conserva
 conteos, no mensajes libres. La recopilación acotada de logs requiere `jq`.
