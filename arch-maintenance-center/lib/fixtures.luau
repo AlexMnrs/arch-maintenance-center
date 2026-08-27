@@ -1,19 +1,3 @@
-local function import(name)
-  local ok, value = pcall(require, "./" .. name .. ".luau")
-  if ok then
-    return value
-  end
-  return require("./" .. name)
-end
-
-local Cleanup = import("cleanup")
-local Disk = import("disk")
-local Health = import("health")
-local Logs = import("logs")
-local Recommendations = import("recommendations")
-local Services = import("services")
-local Updates = import("updates")
-
 local Fixtures = {}
 
 local DAY_MS = 24 * 60 * 60 * 1000
@@ -50,7 +34,9 @@ local function packageSummary(count, packages)
   return table.concat(lines, "\n")
 end
 
-local function updates(nowMs, count, days)
+local function updates(models, nowMs, count, days)
+  local Updates = models.Updates
+  local Recommendations = models.Recommendations
   local packages = count > 0 and {
     { name = "demo-kernel", installedVersion = "1.0.0", availableVersion = "1.1.0" },
     { name = "demo-browser", installedVersion = "2.4.0", availableVersion = "2.5.0" },
@@ -71,7 +57,8 @@ local function updates(nowMs, count, days)
   return value
 end
 
-local function services(nowMs, systemCount, userCount, userAvailable)
+local function services(models, nowMs, systemCount, userCount, userAvailable)
+  local Services = models.Services
   local systemLines = {}
   if systemCount > 0 then
     table.insert(systemLines, "unit\tdemo-network.service loaded failed failed Synthetic network service")
@@ -95,7 +82,8 @@ local function services(nowMs, systemCount, userCount, userAvailable)
   )
 end
 
-local function disk(nowMs, usagePercent)
+local function disk(models, nowMs, usagePercent)
+  local Disk = models.Disk
   return Disk.fromStats({
     usagePercent = usagePercent,
     totalBytes = TOTAL_BYTES,
@@ -103,7 +91,8 @@ local function disk(nowMs, usagePercent)
   }, nowMs)
 end
 
-local function cleanup(nowMs, orphanCount, journalAvailable)
+local function cleanup(models, nowMs, orphanCount, journalAvailable)
+  local Cleanup = models.Cleanup
   local packageLines = {}
   if orphanCount > 0 then
     table.insert(packageLines, "package\tdemo-orphan-tool")
@@ -132,7 +121,8 @@ local function event(nowMs, index, scope)
   }
 end
 
-local function logs(nowMs, count, userAvailable)
+local function logs(models, nowMs, count, userAvailable)
+  local Logs = models.Logs
   local systemEvents = {}
   for index = 1, count do
     table.insert(systemEvents, event(nowMs, index, "system"))
@@ -148,7 +138,9 @@ local function logs(nowMs, count, userAvailable)
   )
 end
 
-local function readySnapshot(id, nowMs, modules)
+local function readySnapshot(models, id, nowMs, modules)
+  local Health = models.Health
+  local Recommendations = models.Recommendations
   local recommendations = Recommendations.fromModules(modules)
   return {
     source = { kind = "fixture", fixtureId = id },
@@ -161,7 +153,8 @@ local function readySnapshot(id, nowMs, modules)
   }
 end
 
-local function emptySnapshot(id, platform, refreshing, nowMs)
+local function emptySnapshot(models, id, platform, refreshing, nowMs)
+  local Health = models.Health
   local modules = {}
   return {
     source = { kind = "fixture", fixtureId = id },
@@ -175,49 +168,54 @@ local function emptySnapshot(id, platform, refreshing, nowMs)
   }
 end
 
-local function buildReady(id, nowMs)
+local function buildReady(models, id, nowMs)
+  local Cleanup = models.Cleanup
+  local Disk = models.Disk
+  local Logs = models.Logs
+  local Services = models.Services
+  local Updates = models.Updates
   if id == "healthy" then
-    return readySnapshot(id, nowMs, {
-      updates = updates(nowMs, 0, 1),
-      services = services(nowMs, 0, 0, true),
-      disk = disk(nowMs, 42),
-      cleanup = cleanup(nowMs, 0, true),
-      logs = logs(nowMs, 0, true),
+    return readySnapshot(models, id, nowMs, {
+      updates = updates(models, nowMs, 0, 1),
+      services = services(models, nowMs, 0, 0, true),
+      disk = disk(models, nowMs, 42),
+      cleanup = cleanup(models, nowMs, 0, true),
+      logs = logs(models, nowMs, 0, true),
     })
   elseif id == "recommendations" then
-    return readySnapshot(id, nowMs, {
-      updates = updates(nowMs, 5, 1),
-      services = services(nowMs, 0, 0, true),
-      disk = disk(nowMs, 52),
-      cleanup = cleanup(nowMs, 2, true),
-      logs = logs(nowMs, 3, true),
+    return readySnapshot(models, id, nowMs, {
+      updates = updates(models, nowMs, 5, 1),
+      services = services(models, nowMs, 0, 0, true),
+      disk = disk(models, nowMs, 52),
+      cleanup = cleanup(models, nowMs, 2, true),
+      logs = logs(models, nowMs, 3, true),
     })
   elseif id == "attention" then
-    return readySnapshot(id, nowMs, {
-      updates = updates(nowMs, 12, 21),
-      services = services(nowMs, 2, 0, true),
-      disk = disk(nowMs, 85),
-      cleanup = cleanup(nowMs, 0, true),
-      logs = logs(nowMs, 4, true),
+    return readySnapshot(models, id, nowMs, {
+      updates = updates(models, nowMs, 12, 21),
+      services = services(models, nowMs, 2, 0, true),
+      disk = disk(models, nowMs, 85),
+      cleanup = cleanup(models, nowMs, 0, true),
+      logs = logs(models, nowMs, 4, true),
     })
   elseif id == "critical" then
-    return readySnapshot(id, nowMs, {
-      updates = updates(nowMs, 24, 30),
-      services = services(nowMs, 1, 0, true),
-      disk = disk(nowMs, 92),
-      cleanup = cleanup(nowMs, 3, true),
-      logs = logs(nowMs, Logs.eventLimit() + 1, true),
+    return readySnapshot(models, id, nowMs, {
+      updates = updates(models, nowMs, 24, 30),
+      services = services(models, nowMs, 1, 0, true),
+      disk = disk(models, nowMs, 92),
+      cleanup = cleanup(models, nowMs, 3, true),
+      logs = logs(models, nowMs, Logs.eventLimit() + 1, true),
     })
   elseif id == "incomplete" then
-    return readySnapshot(id, nowMs, {
+    return readySnapshot(models, id, nowMs, {
       updates = Updates.error(nowMs, "demo_updates_unavailable"),
-      services = services(nowMs, 0, 0, false),
-      disk = disk(nowMs, 60),
-      cleanup = cleanup(nowMs, 4, false),
-      logs = logs(nowMs, 1, false),
+      services = services(models, nowMs, 0, 0, false),
+      disk = disk(models, nowMs, 60),
+      cleanup = cleanup(models, nowMs, 4, false),
+      logs = logs(models, nowMs, 1, false),
     })
   elseif id == "all_checks_failed" then
-    return readySnapshot(id, nowMs, {
+    return readySnapshot(models, id, nowMs, {
       updates = Updates.error(nowMs, "demo_updates_failed"),
       services = Services.error(nowMs, "demo_services_failed"),
       disk = Disk.error(nowMs, "demo_disk_failed"),
@@ -233,6 +231,34 @@ local function buildReady(id, nowMs)
   return nil
 end
 
+local REQUIRED_MODELS = {
+  Cleanup = { "aggregate", "cacheFromDu", "orphansFromSummary", "error", "journalFromUsage" },
+  Disk = { "fromStats", "error" },
+  Health = { "aggregate" },
+  Logs = { "fromScopes", "eventLimit", "error" },
+  Recommendations = { "fromModules", "staleDays" },
+  Services = { "fromScopes", "error" },
+  Updates = { "fromSummary", "error" },
+}
+
+local function validModels(models)
+  if type(models) ~= "table" then
+    return false
+  end
+  for name, functions in pairs(REQUIRED_MODELS) do
+    local model = models[name]
+    if type(model) ~= "table" then
+      return false
+    end
+    for _, functionName in ipairs(functions) do
+      if type(model[functionName]) ~= "function" then
+        return false
+      end
+    end
+  end
+  return true
+end
+
 function Fixtures.ids()
   local values = {}
   for index, id in ipairs(IDS) do
@@ -245,26 +271,27 @@ function Fixtures.contains(id)
   return type(id) == "string" and KNOWN[id] == true
 end
 
-function Fixtures.build(id, nowMs)
+function Fixtures.build(id, nowMs, models)
   if not Fixtures.contains(id)
     or type(nowMs) ~= "number"
     or nowMs ~= nowMs
     or nowMs == math.huge
     or nowMs < 0
+    or not validModels(models)
   then
     return nil
   end
-  local ready = buildReady(id, nowMs)
+  local ready = buildReady(models, id, nowMs)
   if ready ~= nil then
     return ready
   elseif id == "collecting" then
-    return emptySnapshot(id, { state = "supported", id = "arch" }, true, nowMs)
+    return emptySnapshot(models, id, { state = "supported", id = "arch" }, true, nowMs)
   elseif id == "platform_checking" then
-    return emptySnapshot(id, { state = "checking" }, false, nowMs)
+    return emptySnapshot(models, id, { state = "checking" }, false, nowMs)
   elseif id == "platform_unsupported" then
-    return emptySnapshot(id, { state = "unsupported", id = "fedora", detail = "unsupported_id" }, false, nowMs)
+    return emptySnapshot(models, id, { state = "unsupported", id = "fedora", detail = "unsupported_id" }, false, nowMs)
   end
-  return emptySnapshot(id, { state = "error", detail = "read_failed" }, false, nowMs)
+  return emptySnapshot(models, id, { state = "error", detail = "read_failed" }, false, nowMs)
 end
 
 return Fixtures

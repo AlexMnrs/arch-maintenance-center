@@ -1,12 +1,19 @@
 --!nonstrict
 
-local Demo = require("./lib/demo.luau")
-
 local snapshot = noctalia.state.get("snapshot")
 local tr = noctalia.tr
 
+local function fixtureId()
+  local source = type(snapshot) == "table" and snapshot.source or nil
+  return type(source) == "table"
+    and source.kind == "fixture"
+    and type(source.fixtureId) == "string"
+    and source.fixtureId
+    or nil
+end
+
 local function markedTooltip(value)
-  local id = Demo.fixtureId(snapshot)
+  local id = fixtureId()
   if id == nil then
     return value
   end

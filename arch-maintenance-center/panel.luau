@@ -1,7 +1,6 @@
 --!nonstrict
 
 local Bytes = require("./lib/bytes.luau")
-local Demo = require("./lib/demo.luau")
 local Diagnosis = require("./lib/diagnosis.luau")
 local Fixtures = require("./lib/fixtures.luau")
 local Settings = require("./lib/settings.luau")
@@ -31,8 +30,19 @@ local function platformSupported()
   return platform ~= nil and platform.state == "supported" and platform.id == "arch"
 end
 
+local function fixtureId()
+  local source = type(snapshot) == "table" and snapshot.source or nil
+  return type(source) == "table"
+    and source.kind == "fixture"
+    and type(source.fixtureId) == "string"
+    and source.fixtureId
+    or nil
+end
+
 local function fixtureActive()
-  return Demo.isFixture(snapshot)
+  return type(snapshot) == "table"
+    and type(snapshot.source) == "table"
+    and snapshot.source.kind == "fixture"
 end
 
 local function commandsEnabled()
@@ -661,7 +671,7 @@ local function demoToolbar()
   end
 
   local selectedIndex = 0
-  local activeId = Demo.fixtureId(snapshot)
+  local activeId = fixtureId()
   if activeId ~= nil then
     for index, id in ipairs(fixtureIds) do
       if id == activeId then

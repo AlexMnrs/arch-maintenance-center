@@ -20,6 +20,8 @@ jobs:
           for file in arch-maintenance-center/*.luau arch-maintenance-center/lib/*.luau tests/*.luau; do
             luau-compile "$file" >/dev/null
           done
+      - name: Check Noctalia module paths
+        run: bash scripts/check_noctalia_requires.sh
       - name: Run tests
         run: |
           for test_file in tests/*_spec.luau; do

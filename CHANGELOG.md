@@ -90,8 +90,9 @@ cuando comience a publicar versiones.
   pueden alterar una recopilación posterior.
 - Un fallo al comprobar unidades de usuario ya no se presenta como un
   diagnóstico completo.
-- Los entrypoints del plugin conservan rutas `require` compatibles con Noctalia
-  API 24, evitando que un módulo demo impida cargar el widget o el servicio.
+- Los entrypoints usan rutas `require` literales compatibles con Noctalia API
+  24, sin fallbacks que oculten errores; el widget ya no depende de la cadena
+  de construcción de fixtures demo.
 - El patrón que analiza la salida de `checkupdates` ya no contiene un escape
   inválido para el analizador de Luau.
 

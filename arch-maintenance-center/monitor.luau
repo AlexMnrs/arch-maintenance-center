@@ -1,27 +1,29 @@
 --!nonstrict
 
-local function import(path)
-  local ok, value = pcall(require, path .. ".luau")
-  if ok then
-    return value
-  end
-  return require(path)
-end
+local Command = require("./lib/command.luau")
+local Collection = require("./lib/collection.luau")
+local Cleanup = require("./lib/cleanup.luau")
+local Demo = require("./lib/demo.luau")
+local Disk = require("./lib/disk.luau")
+local Fixtures = require("./lib/fixtures.luau")
+local Health = require("./lib/health.luau")
+local Logs = require("./lib/logs.luau")
+local Platform = require("./lib/platform.luau")
+local Refresh = require("./lib/refresh.luau")
+local Recommendations = require("./lib/recommendations.luau")
+local Services = require("./lib/services.luau")
+local Settings = require("./lib/settings.luau")
+local Updates = require("./lib/updates.luau")
 
-local Command = import("./lib/command")
-local Collection = import("./lib/collection")
-local Cleanup = import("./lib/cleanup")
-local Demo = import("./lib/demo")
-local Disk = import("./lib/disk")
-local Fixtures = import("./lib/fixtures")
-local Health = import("./lib/health")
-local Logs = import("./lib/logs")
-local Platform = import("./lib/platform")
-local Refresh = import("./lib/refresh")
-local Recommendations = import("./lib/recommendations")
-local Services = import("./lib/services")
-local Settings = import("./lib/settings")
-local Updates = import("./lib/updates")
+local FIXTURE_MODELS = {
+  Cleanup = Cleanup,
+  Disk = Disk,
+  Health = Health,
+  Logs = Logs,
+  Recommendations = Recommendations,
+  Services = Services,
+  Updates = Updates,
+}
 
 local CHECKUPDATES_TIMEOUT_MS = 30000
 local LOCAL_COMMAND_TIMEOUT_MS = 5000
@@ -51,6 +53,10 @@ local function realSnapshot()
     recommendations = {},
     health = Health.aggregate({}, {}),
   }
+end
+
+local function buildFixture(id, nowMs)
+  return Fixtures.build(id, nowMs, FIXTURE_MODELS)
 end
 
 local snapshot = realSnapshot()
@@ -465,6 +471,7 @@ refresh = function()
     Demo.routeRefresh(
       demoFixtureId,
       noctalia.nowMs(),
+      buildFixture,
       function(fixture)
         snapshot = fixture
         publish()
@@ -479,7 +486,7 @@ end
 local function selectFixture(id)
   invalidateActivity()
   demoFixtureId = id
-  local fixture = Fixtures.build(id, noctalia.nowMs())
+  local fixture = buildFixture(id, noctalia.nowMs())
   if fixture == nil then
     demoFixtureId = nil
     snapshot = realSnapshot()
@@ -550,7 +557,7 @@ noctalia.state.watch("refresh_request", function(_value)
   refresh()
 end)
 noctalia.state.watch("demo_request", function(value)
-  local id = Demo.requestedId(value, developerModeEnabled, sessionStartedAtMs)
+  local id = Demo.requestedId(value, developerModeEnabled, sessionStartedAtMs, Fixtures.contains)
   if id == "real" then
     if demoFixtureId ~= nil then
       selectRealSystem()

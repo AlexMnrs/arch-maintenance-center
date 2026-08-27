@@ -1,13 +1,3 @@
-local function import(name)
-  local ok, value = pcall(require, "./" .. name .. ".luau")
-  if ok then
-    return value
-  end
-  return require("./" .. name)
-end
-
-local Fixtures = import("fixtures")
-
 local Demo = {}
 
 function Demo.isFixture(snapshot)
@@ -30,9 +20,9 @@ function Demo.acceptRealCallback(expectedGeneration, currentGeneration, fixtureI
     and expectedGeneration == currentGeneration
 end
 
-function Demo.routeRefresh(fixtureId, nowMs, publishFixture, collectReal)
-  if Fixtures.contains(fixtureId) then
-    local fixture = Fixtures.build(fixtureId, nowMs)
+function Demo.routeRefresh(fixtureId, nowMs, buildFixture, publishFixture, collectReal)
+  if type(buildFixture) == "function" and type(publishFixture) == "function" then
+    local fixture = buildFixture(fixtureId, nowMs)
     if fixture ~= nil then
       publishFixture(fixture)
       return "fixture"
@@ -42,7 +32,7 @@ function Demo.routeRefresh(fixtureId, nowMs, publishFixture, collectReal)
   return "real"
 end
 
-function Demo.requestedId(request, enabled, minimumNonce)
+function Demo.requestedId(request, enabled, minimumNonce, isKnownFixture)
   if enabled ~= true
     or type(request) ~= "table"
     or type(request.id) ~= "string"
@@ -54,7 +44,10 @@ function Demo.requestedId(request, enabled, minimumNonce)
   then
     return nil
   end
-  if request.id == "real" or Fixtures.contains(request.id) then
+  if request.id == "real" then
+    return request.id
+  end
+  if type(isKnownFixture) == "function" and isKnownFixture(request.id) == true then
     return request.id
   end
   return nil
