@@ -34,6 +34,8 @@ La versión `0.3.0` implementa:
 - vistas de detalle navegables dentro del panel, diagnóstico redactado y
   comandos de inspección fáciles de copiar;
 - refresco inicial, manual y programado.
+- herramientas de desarrollo opcionales con fixtures visuales para revisar todos
+  los estados del panel y del widget sin modificar el sistema;
 
 No incluye AUR, tamaños de descarga, clasificación de warnings o logs,
 cálculo de espacio recuperable, red ni métricas de monitorización continua.
@@ -45,6 +47,10 @@ pero no ejecuta operaciones privilegiadas, limpiezas, actualizaciones ni
 reparaciones. El detalle de Updates puede copiar `sudo pacman -Syu` tras
 explicar su efecto; esa acción nunca se ejecuta desde Noctalia.
 
+Las herramientas de desarrollo están desactivadas por defecto. Al activar
+`Developer tools` en los ajustes avanzados aparece un selector temporal en el
+panel para cargar fixtures sintéticos; se restauran los datos reales al
+recargar el plugin y los comandos quedan deshabilitados mientras hay datos demo.
 
 ## Estado del proyecto
 
@@ -72,6 +78,11 @@ Las pruebas puras se ejecutan con:
 ```bash
 for test_file in tests/*_spec.luau; do luau "$test_file"; done
 ```
+
+Para revisar estados visuales, activa `Developer tools` en los ajustes del
+plugin y elige una entrada del selector `Data source`. `Real system` vuelve a
+la comprobación normal; los fixtures no ejecutan colectores ni escriben en el
+sistema.
 
 ## Licencia
 

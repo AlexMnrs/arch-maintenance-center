@@ -94,6 +94,11 @@ hardware concreto.
 - Licencia: MIT.
 - Idioma inicial de la interfaz: inglés mediante Noctalia Translate.
 - Referencia de estructura: el plugin GitHub Activity de AlexMnrs.
+- Herramientas demo: ajuste avanzado desactivado por defecto, selector temporal
+  de fixtures dentro del panel y vuelta a `Real system` al recargar el plugin.
+  Los snapshots sintéticos se marcan como `source.kind=fixture`, alimentan el
+  widget y el panel por la misma ruta que los datos reales, no ejecutan
+  colectores y no habilitan comandos copiables.
 
 ### Recopilación implementada
 

@@ -79,5 +79,16 @@ A.truthy(string.find(unsupportedDiagnosis, "Recommended actions: 0", 1, true), "
 A.truthy(string.find(unsupportedDiagnosis, "Status: unavailable", 1, true), "unsupported diagnosis is unavailable")
 A.equal(Diagnosis.commands(unsupported), "", "unsupported platforms receive no Arch commands")
 
+local fixture = {
+  source = { kind = "fixture", fixtureId = "critical" },
+  collectedAtMs = snapshot.collectedAtMs,
+  platform = snapshot.platform,
+  health = snapshot.health,
+  recommendations = snapshot.recommendations,
+  modules = snapshot.modules,
+}
+local fixtureDiagnosis = Diagnosis.format(fixture)
+A.truthy(string.find(fixtureDiagnosis, "Source: fixture (critical)", 1, true), "fixture source is explicit")
+A.equal(Diagnosis.commands(fixture), "", "fixtures receive no commands")
 
 print("diagnosis_spec passed")

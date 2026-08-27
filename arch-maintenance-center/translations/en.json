@@ -12,6 +12,10 @@
         "thirty": "Every 30 minutes",
         "sixty": "Every 60 minutes"
       }
+    },
+    "developer_mode": {
+      "label": "Developer tools",
+      "description": "Show temporary demo fixtures in the panel. The real system is restored whenever the plugin reloads."
     }
   },
   "panel": {
@@ -49,6 +53,25 @@
     "unsupported_detail": "Arch Maintenance Center runs maintenance checks only on Arch Linux. Refresh after switching to a supported system.",
     "error": "Platform check unavailable",
     "error_detail": "Could not confirm that this system is Arch Linux. Refresh to try again."
+  },
+  "developer": {
+    "data_source": "Data source",
+    "real_system": "Real system",
+    "demo_active": "Demo data · {fixture}",
+    "demo_notice": "Synthetic values are shown. No system checks run while this fixture is active.",
+    "commands_disabled": "Commands are disabled while demo data is active.",
+    "fixtures": {
+      "healthy": "Healthy",
+      "recommendations": "Recommendations",
+      "attention": "Attention",
+      "critical": "Critical",
+      "incomplete": "Incomplete",
+      "all_checks_failed": "All checks failed",
+      "collecting": "Collecting data",
+      "platform_checking": "Checking platform",
+      "platform_unsupported": "Unsupported platform",
+      "platform_error": "Platform error"
+    }
   },
   "recommendation": {
     "title": "Recommended actions",
@@ -127,6 +150,7 @@
     "error": "System logs could not be checked."
   },
   "widget": {
+    "demo": "Demo · {fixture}",
     "healthy": "Arch Maintenance Center\nSystem OK",
     "recommendation_one": "Arch Maintenance Center\n1 recommended action",
     "recommendations": "Arch Maintenance Center\n{count} recommended actions",

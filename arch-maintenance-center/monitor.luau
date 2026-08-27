@@ -1,17 +1,27 @@
 --!nonstrict
 
-local Command = require("./lib/command.luau")
-local Collection = require("./lib/collection.luau")
-local Cleanup = require("./lib/cleanup.luau")
-local Disk = require("./lib/disk.luau")
-local Health = require("./lib/health.luau")
-local Logs = require("./lib/logs.luau")
-local Platform = require("./lib/platform.luau")
-local Refresh = require("./lib/refresh.luau")
-local Recommendations = require("./lib/recommendations.luau")
-local Services = require("./lib/services.luau")
-local Settings = require("./lib/settings.luau")
-local Updates = require("./lib/updates.luau")
+local function import(path)
+  local ok, value = pcall(require, path .. ".luau")
+  if ok then
+    return value
+  end
+  return require(path)
+end
+
+local Command = import("./lib/command")
+local Collection = import("./lib/collection")
+local Cleanup = import("./lib/cleanup")
+local Demo = import("./lib/demo")
+local Disk = import("./lib/disk")
+local Fixtures = import("./lib/fixtures")
+local Health = import("./lib/health")
+local Logs = import("./lib/logs")
+local Platform = import("./lib/platform")
+local Refresh = import("./lib/refresh")
+local Recommendations = import("./lib/recommendations")
+local Services = import("./lib/services")
+local Settings = import("./lib/settings")
+local Updates = import("./lib/updates")
 
 local CHECKUPDATES_TIMEOUT_MS = 30000
 local LOCAL_COMMAND_TIMEOUT_MS = 5000
@@ -21,22 +31,39 @@ local MODULE_NAMES = { "updates", "services", "disk", "cleanup", "logs" }
 
 local gate = Refresh.new()
 local started = false
+local developerModeEnabled = false
+local demoFixtureId = nil
 local refreshIntervalMs = Settings.refreshIntervalMs("15")
 local nextRefreshAtMs = nil
 local run = nil
 local runSequence = 0
 local platformCheckActive = false
-local snapshot = {
-  source = { kind = "real" },
-  refreshing = false,
-  collectedAtMs = nil,
-  modules = {},
-  platform = { state = "checking" },
-  recommendations = {},
-  health = Health.aggregate({}, {}),
-}
+local modeGeneration = 0
+local sessionStartedAtMs = noctalia.nowMs()
+
+local function realSnapshot()
+  return {
+    source = { kind = "real" },
+    refreshing = false,
+    collectedAtMs = nil,
+    modules = {},
+    platform = { state = "checking" },
+    recommendations = {},
+    health = Health.aggregate({}, {}),
+  }
+end
+
+local snapshot = realSnapshot()
 
 local refresh
+
+local function invalidateActivity()
+  modeGeneration = modeGeneration + 1
+  run = nil
+  platformCheckActive = false
+  nextRefreshAtMs = nil
+  gate = Refresh.new()
+end
 
 local function publish()
   snapshot.recommendations = Recommendations.fromModules(snapshot.modules)
@@ -364,6 +391,9 @@ local function clearUnsupportedPlatform(platform)
 end
 
 local function checkPlatform()
+  if demoFixtureId ~= nil then
+    return
+  end
   if platformCheckActive then
     snapshot.refreshing = true
     publish()
@@ -371,6 +401,7 @@ local function checkPlatform()
   end
 
   platformCheckActive = true
+  local generation = modeGeneration
   run = nil
   nextRefreshAtMs = nil
   snapshot.platform = { state = "checking" }
@@ -381,6 +412,9 @@ local function checkPlatform()
   publish()
 
   local accepted = noctalia.readFileAsync("/etc/os-release", function(contents, readError)
+    if not Demo.acceptRealCallback(generation, modeGeneration, demoFixtureId) then
+      return
+    end
     platformCheckActive = false
     if contents == nil then
       clearUnsupportedPlatform({ state = "error", detail = readError and "read_failed" or "missing_output" })
@@ -393,12 +427,15 @@ local function checkPlatform()
     end
   end)
   if not accepted then
+    if not Demo.acceptRealCallback(generation, modeGeneration, demoFixtureId) then
+      return
+    end
     platformCheckActive = false
     clearUnsupportedPlatform({ state = "error", detail = "read_rejected" })
   end
 end
 
-refresh = function()
+local function refreshReal()
   if snapshot.platform == nil or snapshot.platform.state ~= "supported" or snapshot.platform.id ~= "arch" then
     checkPlatform()
     return
@@ -423,9 +460,52 @@ refresh = function()
   collectLogs(checkedAtMs, function(value) finishModule(runId, "logs", value) end)
 end
 
+refresh = function()
+  if demoFixtureId ~= nil then
+    Demo.routeRefresh(
+      demoFixtureId,
+      noctalia.nowMs(),
+      function(fixture)
+        snapshot = fixture
+        publish()
+      end,
+      refreshReal
+    )
+    return
+  end
+  refreshReal()
+end
+
+local function selectFixture(id)
+  invalidateActivity()
+  demoFixtureId = id
+  local fixture = Fixtures.build(id, noctalia.nowMs())
+  if fixture == nil then
+    demoFixtureId = nil
+    snapshot = realSnapshot()
+    publish()
+    refresh()
+    return
+  end
+  snapshot = fixture
+  publish()
+end
+
+local function selectRealSystem()
+  invalidateActivity()
+  demoFixtureId = nil
+  snapshot = realSnapshot()
+  publish()
+  refresh()
+end
+
 local function configureRefreshInterval()
   refreshIntervalMs = Settings.refreshIntervalMs(noctalia.getConfig("refresh_interval_minutes"))
   noctalia.setUpdateInterval(WATCHDOG_TICK_MS)
+end
+
+local function configureDeveloperMode()
+  developerModeEnabled = noctalia.getConfig("developer_mode") == true
 end
 
 local function moduleDeadlineResult(name, checkedAtMs)
@@ -465,8 +545,19 @@ local function ensureStarted()
 end
 
 configureRefreshInterval()
+configureDeveloperMode()
 noctalia.state.watch("refresh_request", function(_value)
   refresh()
+end)
+noctalia.state.watch("demo_request", function(value)
+  local id = Demo.requestedId(value, developerModeEnabled, sessionStartedAtMs)
+  if id == "real" then
+    if demoFixtureId ~= nil then
+      selectRealSystem()
+    end
+  elseif id ~= nil then
+    selectFixture(id)
+  end
 end)
 ensureStarted()
 
@@ -479,12 +570,21 @@ function update()
 end
 
 function onEnable()
-  ensureStarted()
+  if started and demoFixtureId ~= nil then
+    selectRealSystem()
+  else
+    ensureStarted()
+  end
 end
 
 function onConfigChanged()
   configureRefreshInterval()
-  refresh()
+  configureDeveloperMode()
+  if not developerModeEnabled and demoFixtureId ~= nil then
+    selectRealSystem()
+  else
+    refresh()
+  end
 end
 
 function onIpc(event, _payload)

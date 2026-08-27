@@ -1,7 +1,9 @@
 --!nonstrict
 
 local Bytes = require("./lib/bytes.luau")
+local Demo = require("./lib/demo.luau")
 local Diagnosis = require("./lib/diagnosis.luau")
+local Fixtures = require("./lib/fixtures.luau")
 local Settings = require("./lib/settings.luau")
 local Updates = require("./lib/updates.luau")
 
@@ -10,6 +12,7 @@ local open = false
 local view = "overview"
 local recommendationsExpanded = false
 local tr = noctalia.tr
+local fixtureIds = Fixtures.ids()
 
 local function rounded(value)
   return tostring(math.floor((tonumber(value) or 0) + 0.5))
@@ -28,9 +31,12 @@ local function platformSupported()
   return platform ~= nil and platform.state == "supported" and platform.id == "arch"
 end
 
+local function fixtureActive()
+  return Demo.isFixture(snapshot)
+end
 
 local function commandsEnabled()
-  return platformSupported()
+  return platformSupported() and not fixtureActive()
 end
 
 local function formatDateTime(value)
@@ -339,8 +345,17 @@ local function updateDetail()
     end
     table.insert(children, ui.separator({ thickness = 1, color = "outline/0.35", spacing = 4 }))
     table.insert(children, ui.label({ text = tr("updates.upgrade_command"), fontSize = 13, fontWeight = "bold" }))
-    table.insert(children, ui.label({ text = Updates.upgradeCommand(), fontFamily = "monospace", color = "on_surface_variant" }))
-    table.insert(children, ui.label({ text = tr("updates.upgrade_warning"), color = "tertiary", fontSize = 11, maxLines = 3 }))
+    if fixtureActive() then
+      table.insert(children, ui.label({
+        text = tr("developer.commands_disabled"),
+        color = "on_surface_variant",
+        fontSize = 11,
+        maxLines = 2,
+      }))
+    else
+      table.insert(children, ui.label({ text = Updates.upgradeCommand(), fontFamily = "monospace", color = "on_surface_variant" }))
+      table.insert(children, ui.label({ text = tr("updates.upgrade_warning"), color = "tertiary", fontSize = 11, maxLines = 3 }))
+    end
   end
   return children
 end
@@ -636,6 +651,59 @@ local function detailBody()
   return logsDetail()
 end
 
+local function demoToolbar()
+  if noctalia.getConfig("developer_mode") ~= true and not fixtureActive() then
+    return nil
+  end
+  local options = { tr("developer.real_system") }
+  for _, id in ipairs(fixtureIds) do
+    table.insert(options, tr("developer.fixtures." .. id))
+  end
+
+  local selectedIndex = 0
+  local activeId = Demo.fixtureId(snapshot)
+  if activeId ~= nil then
+    for index, id in ipairs(fixtureIds) do
+      if id == activeId then
+        selectedIndex = index
+        break
+      end
+    end
+  end
+  local active = activeId ~= nil
+  return ui.column({
+    gap = 4,
+    paddingH = 18,
+    paddingV = 8,
+    fill = active and "tertiary_container" or "surface_variant/0.35",
+  }, {
+    ui.row({ gap = 10, align = "center" }, {
+      ui.glyph({ name = "flask", size = 18, color = active and "on_tertiary_container" or "on_surface_variant" }),
+      ui.label({
+        text = active and tr("developer.demo_active", { fixture = tr("developer.fixtures." .. activeId) })
+          or tr("developer.data_source"),
+        fontWeight = "bold",
+        fontSize = 12,
+        color = active and "on_tertiary_container" or "on_surface_variant",
+        flexGrow = 1,
+        maxLines = 1,
+      }),
+      ui.select({
+        options = options,
+        selectedIndex = selectedIndex,
+        width = 250,
+        onChange = "onDemoSourceChanged",
+      }),
+    }),
+    active and ui.label({
+      text = tr("developer.demo_notice"),
+      color = "on_tertiary_container",
+      fontSize = 10,
+      maxLines = 2,
+    }) or ui.spacer({ height = 0 }),
+  })
+end
+
 local function actions()
   if view == "overview" then
     local children = {
@@ -659,6 +727,8 @@ local function actions()
         contentAlign = "center",
         variant = "outline",
         flexGrow = 1,
+        enabled = commandsEnabled(),
+        tooltip = commandsEnabled() and tr("action.copy_commands") or tr("developer.commands_disabled"),
         onClick = "onCopyCommands",
       }))
     end
@@ -674,6 +744,8 @@ local function actions()
       contentAlign = "center",
       variant = "outline",
       flexGrow = 1,
+      enabled = commandsEnabled(),
+      tooltip = commandsEnabled() and tr("action.copy_commands") or tr("developer.commands_disabled"),
       onClick = "onCopyCommands",
     }),
   }
@@ -689,6 +761,8 @@ local function actions()
       contentAlign = "center",
       variant = "outline",
       flexGrow = 1,
+      enabled = not fixtureActive(),
+      tooltip = fixtureActive() and tr("developer.commands_disabled") or tr("action.copy_upgrade"),
       onClick = "onCopyUpgrade",
     }))
   end
@@ -722,13 +796,19 @@ function render()
 
   local bodyChildren = not platformSupported() and platformBody() or (view == "overview" and overviewBody() or detailBody())
   local body = ui.scroll({ gap = 12, paddingH = 18, paddingV = 14, flexGrow = 1, align = "stretch" }, bodyChildren)
-  panel.render(ui.column({ gap = 0, fill = "surface", flexGrow = 1, align = "stretch" }, {
+  local rootChildren = {
     ui.row({ align = "center", gap = 12, paddingH = 18, paddingV = 11 }, headerChildren),
     ui.separator({ thickness = 1, color = "outline/0.35" }),
-    body,
-    ui.separator({ thickness = 1, color = "outline/0.35" }),
-    actions(),
-  }))
+  }
+  local toolbar = demoToolbar()
+  if toolbar ~= nil then
+    table.insert(rootChildren, toolbar)
+    table.insert(rootChildren, ui.separator({ thickness = 1, color = "outline/0.35" }))
+  end
+  table.insert(rootChildren, body)
+  table.insert(rootChildren, ui.separator({ thickness = 1, color = "outline/0.35" }))
+  table.insert(rootChildren, actions())
+  panel.render(ui.column({ gap = 0, fill = "surface", flexGrow = 1, align = "stretch" }, rootChildren))
 end
 
 function onOpen(_context)
@@ -751,6 +831,15 @@ function onRefreshClicked()
   noctalia.state.set("refresh_request", noctalia.nowMs())
 end
 
+function onDemoSourceChanged(index, _label)
+  local selected = math.floor(tonumber(index) or -1)
+  local id = selected == 0 and "real" or fixtureIds[selected]
+  if id == nil then
+    return
+  end
+  noctalia.state.set("demo_request", { id = id, nonce = noctalia.nowMs() })
+end
+
 function onCopyDiagnosis()
   if noctalia.copyToClipboard(Diagnosis.format(snapshot), "text/plain") then
     noctalia.notify(tr("panel.title"), tr("action.diagnosis_copied"))
@@ -760,6 +849,13 @@ function onCopyDiagnosis()
 end
 
 function onCopyCommands()
+  if fixtureActive() then
+    noctalia.notifyError(tr("panel.title"), tr("developer.commands_disabled"))
+    return
+  elseif not platformSupported() then
+    noctalia.notifyError(tr("panel.title"), tr("platform.error_detail"))
+    return
+  end
   if noctalia.copyToClipboard(Diagnosis.commands(snapshot), "text/plain") then
     noctalia.notify(tr("panel.title"), tr("action.commands_copied"))
   else
@@ -768,10 +864,23 @@ function onCopyCommands()
 end
 
 function onCopyUpgrade()
+  if fixtureActive() then
+    noctalia.notifyError(tr("panel.title"), tr("developer.commands_disabled"))
+    return
+  elseif not platformSupported() then
+    noctalia.notifyError(tr("panel.title"), tr("platform.error_detail"))
+    return
+  end
   if noctalia.copyToClipboard(Updates.upgradeCommand(), "text/plain") then
     noctalia.notify(tr("panel.title"), tr("action.upgrade_copied"))
   else
     noctalia.notifyError(tr("panel.title"), tr("action.copy_failed"))
+  end
+end
+
+function onConfigChanged()
+  if open then
+    render()
   end
 end
 

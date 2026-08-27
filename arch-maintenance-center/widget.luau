@@ -1,9 +1,17 @@
 --!nonstrict
 
+local Demo = require("./lib/demo.luau")
 
 local snapshot = noctalia.state.get("snapshot")
 local tr = noctalia.tr
 
+local function markedTooltip(value)
+  local id = Demo.fixtureId(snapshot)
+  if id == nil then
+    return value
+  end
+  return tr("widget.demo", { fixture = tr("developer.fixtures." .. id) }) .. "\n" .. value
+end
 
 local function presentation()
   if snapshot == nil or snapshot.health == nil then
@@ -12,32 +20,32 @@ local function presentation()
 
   local platform = type(snapshot.platform) == "table" and snapshot.platform or nil
   if platform == nil or platform.state == "checking" then
-    return "shield-search", "…", tr("widget.platform_checking")
+    return "shield-search", "…", markedTooltip(tr("widget.platform_checking"))
   elseif platform.state == "unsupported" then
-    return "shield-x", "!", tr("widget.platform_unsupported")
+    return "shield-x", "!", markedTooltip(tr("widget.platform_unsupported"))
   elseif platform.state ~= "supported" or platform.id ~= "arch" then
-    return "shield-exclamation", "!", tr("widget.platform_error")
+    return "shield-exclamation", "!", markedTooltip(tr("widget.platform_error"))
   end
 
   local health = snapshot.health
   local suffix = snapshot.refreshing and "\n" .. tr("status.refreshing") or ""
   if snapshot.refreshing == true and type(snapshot.collectedAtMs) ~= "number" then
-    return "shield-search", "…", tr("status.loading")
+    return "shield-search", "…", markedTooltip(tr("status.loading"))
   end
   if health.severity == "critical" then
     local key = health.issueCount == 1 and "widget.critical_one" or "widget.critical"
-    return "shield-x", tostring(health.issueCount), tr(key, { count = health.issueCount }) .. suffix
+    return "shield-x", tostring(health.issueCount), markedTooltip(tr(key, { count = health.issueCount }) .. suffix)
   elseif health.severity == "warning" then
     local key = health.issueCount == 1 and "widget.attention_one" or "widget.attention"
-    return "shield-exclamation", tostring(health.issueCount), tr(key, { count = health.issueCount }) .. suffix
+    return "shield-exclamation", tostring(health.issueCount), markedTooltip(tr(key, { count = health.issueCount }) .. suffix)
   elseif health.complete ~= true then
     local key = health.unavailableCount == 1 and "widget.incomplete_one" or "widget.incomplete"
-    return "shield-exclamation", "!", tr(key, { count = health.unavailableCount }) .. suffix
+    return "shield-exclamation", "!", markedTooltip(tr(key, { count = health.unavailableCount }) .. suffix)
   elseif (tonumber(health.recommendationCount) or 0) > 0 then
     local key = health.recommendationCount == 1 and "widget.recommendation_one" or "widget.recommendations"
-    return "tool", tostring(health.recommendationCount), tr(key, { count = health.recommendationCount }) .. suffix
+    return "tool", tostring(health.recommendationCount), markedTooltip(tr(key, { count = health.recommendationCount }) .. suffix)
   end
-  return "shield-check", "", tr("widget.healthy") .. suffix
+  return "shield-check", "", markedTooltip(tr("widget.healthy") .. suffix)
 end
 
 local function render()

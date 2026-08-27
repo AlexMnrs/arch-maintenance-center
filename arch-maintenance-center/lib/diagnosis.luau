@@ -1,5 +1,13 @@
 local Diagnosis = {}
+local function import(name)
+  local ok, value = pcall(require, "./" .. name .. ".luau")
+  if ok then
+    return value
+  end
+  return require("./" .. name)
+end
 
+local Demo = import("demo")
 
 local function safeNumber(value, fallback)
   return type(value) == "number" and value == value and value ~= math.huge and value >= 0 and value or fallback
@@ -79,7 +87,9 @@ function Diagnosis.format(snapshot)
   local lines = {
     "Arch Maintenance Center diagnosis",
     "Generated: " .. formatUtc(snapshot.collectedAtMs),
-    "Source: real",
+    Demo.isFixture(snapshot)
+      and "Source: fixture (" .. tostring(Demo.fixtureId(snapshot)) .. ")"
+      or "Source: real",
     "Platform: " .. tostring(platform.state or "unknown") .. (platform.id and " (" .. safePlatformId(platform.id) .. ")" or ""),
   }
   local health = snapshot.health
@@ -174,7 +184,7 @@ function Diagnosis.format(snapshot)
 end
 
 function Diagnosis.commands(snapshot)
-  if not isSupportedPlatform(snapshot) then
+  if Demo.isFixture(snapshot) or not isSupportedPlatform(snapshot) then
     return ""
   end
   local commands = {
